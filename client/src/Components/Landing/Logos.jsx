@@ -1,29 +1,19 @@
+import React from 'react';
+
 export default function Logos() {
   return (
-    <section className="w-full py-16 px-6 border-y border-white/5 flex flex-col items-center">
-      <div className="text-[10px] font-mono tracking-widest text-white/40 mb-10 uppercase">
-        BUILT FOR MODERN ENGINEERING TEAMS.
-      </div>
-      
-      <div className="flex flex-wrap justify-center items-center gap-12 md:gap-20 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">🐙</span> GITHUB
-        </div>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">▲</span> NEXT.JS
-        </div>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">⚡</span> SUPABASE
-        </div>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">💳</span> STRIPE
-        </div>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">🌊</span> TAILWIND
-        </div>
-        <div className="flex items-center gap-2 font-mono text-sm tracking-wider text-white">
-          <span className="text-xl">☁️</span> VERCEL
-        </div>
+    <section className="w-full py-12 border-y border-white/5 overflow-hidden flex items-center bg-black/20">
+      <div className="flex whitespace-nowrap animate-[marquee_20s_linear_infinite] group-hover:[animation-play-state:paused]">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="flex items-center gap-12 px-6">
+            <span className="text-sm font-mono tracking-[0.2em] text-white/50 uppercase">
+              REPOLENS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS • 
+            </span>
+            <span className="text-sm font-mono tracking-[0.2em] text-white/50 uppercase">
+              REPOLENS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS •
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );

@@ -1,7 +1,55 @@
+import React, { useRef } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export default function EditorMockup() {
+  const container = useRef(null);
+
+  useGSAP(() => {
+    gsap.from('.editor-window', {
+      scrollTrigger: {
+        trigger: container.current,
+        start: 'top 85%',
+      },
+      y: 100,
+      opacity: 0,
+      scale: 0.95,
+      duration: 1,
+      ease: 'power3.out'
+    });
+
+    gsap.from('.editor-sidebar-item', {
+      scrollTrigger: {
+        trigger: container.current,
+        start: 'top 70%',
+      },
+      x: -20,
+      opacity: 0,
+      duration: 0.5,
+      stagger: 0.1,
+      ease: 'power2.out',
+      delay: 0.5
+    });
+
+    gsap.from('.editor-code-line', {
+      scrollTrigger: {
+        trigger: container.current,
+        start: 'top 60%',
+      },
+      opacity: 0,
+      y: 10,
+      duration: 0.3,
+      stagger: 0.05,
+      delay: 0.8
+    });
+  }, { scope: container });
+
   return (
-    <section className="w-full px-6 flex justify-center mb-24">
-      <div className="w-full max-w-6xl border border-white/10 rounded-lg overflow-hidden bg-[#0d0d0f] shadow-2xl shadow-white/5">
+    <section ref={container} className="w-full px-6 flex justify-center mb-24 perspective-[1000px]">
+      <div className="editor-window w-full max-w-6xl border border-white/10 rounded-lg overflow-hidden bg-[#0d0d0f] shadow-2xl shadow-white/5 transform-style-3d">
         
         {/* Editor Header */}
         <div className="h-10 border-b border-white/10 flex items-center px-4 bg-[#0a0a0c]">
@@ -25,11 +73,11 @@ export default function EditorMockup() {
           <div className="hidden md:block w-64 border-r border-white/10 p-4">
             <div className="text-[10px] font-mono text-white/50 mb-4 tracking-widest">FILE STRUCTURE</div>
             <div className="space-y-2 text-xs font-mono text-white/70">
-              <div className="flex items-center gap-2"><span className="text-white/30">📁</span> SRC</div>
-              <div className="flex items-center gap-2 pl-4"><span className="text-white/30">📁</span> COMPONENTS</div>
-              <div className="flex items-center gap-2 pl-8 text-white bg-white/5 px-2 py-1 rounded"><span className="text-white/30">📄</span> REPOLENS_PANEL.TS</div>
-              <div className="flex items-center gap-2 pl-4"><span className="text-white/30">📁</span> MIDDLEWARE</div>
-              <div className="flex items-center gap-2 pl-4"><span className="text-white/30">⚙️</span> CONFIG.JSON</div>
+              <div className="editor-sidebar-item flex items-center gap-2"><span className="text-white/30">📁</span> SRC</div>
+              <div className="editor-sidebar-item flex items-center gap-2 pl-4"><span className="text-white/30">📁</span> COMPONENTS</div>
+              <div className="editor-sidebar-item flex items-center gap-2 pl-8 text-white bg-white/5 px-2 py-1 rounded"><span className="text-white/30">📄</span> REPOLENS_PANEL.TS</div>
+              <div className="editor-sidebar-item flex items-center gap-2 pl-4"><span className="text-white/30">📁</span> MIDDLEWARE</div>
+              <div className="editor-sidebar-item flex items-center gap-2 pl-4"><span className="text-white/30">⚙️</span> CONFIG.JSON</div>
             </div>
           </div>
 
@@ -37,15 +85,15 @@ export default function EditorMockup() {
           <div className="flex-1 p-6 relative overflow-hidden flex flex-col font-mono text-xs md:text-sm">
             <div className="text-white/50">1</div>
             <div className="absolute top-6 left-12 text-white/80 space-y-1">
-              <div><span className="text-[#a78bfa]">import</span> React, {'{'} useState {'}'} <span className="text-[#a78bfa]">from</span> <span className="text-[#34d399]">'react'</span>;</div>
+              <div className="editor-code-line"><span className="text-[#a78bfa]">import</span> React, {'{'} useState {'}'} <span className="text-[#a78bfa]">from</span> <span className="text-[#34d399]">'react'</span>;</div>
               <br />
-              <div><span className="text-[#a78bfa]">export</span> <span className="text-[#a78bfa]">async</span> <span className="text-[#60a5fa]">function</span> <span className="text-[#fcd34d]">RepoPanel</span>(props: any) {'{'}</div>
-              <div className="pl-4"><span className="text-[#a78bfa]">const</span> [score] = useState(props.healthScore);</div>
-              <div className="pl-4 text-white/40">// Fetching repository metrics...</div>
-              <div className="pl-4"><span className="text-[#a78bfa]">await</span> AnalyzeRepo.run(score);</div>
-              <div className="pl-4"><span className="text-[#a78bfa]">return</span> (</div>
-              <div className="pl-8 text-white/60">{'<div className="panel">'}</div>
-              <div className="pl-12">...</div>
+              <div className="editor-code-line"><span className="text-[#a78bfa]">export</span> <span className="text-[#a78bfa]">async</span> <span className="text-[#60a5fa]">function</span> <span className="text-[#fcd34d]">RepoPanel</span>(props: any) {'{'}</div>
+              <div className="editor-code-line pl-4"><span className="text-[#a78bfa]">const</span> [score] = useState(props.healthScore);</div>
+              <div className="editor-code-line pl-4 text-white/40">// Fetching repository metrics...</div>
+              <div className="editor-code-line pl-4"><span className="text-[#a78bfa]">await</span> AnalyzeRepo.run(score);</div>
+              <div className="editor-code-line pl-4"><span className="text-[#a78bfa]">return</span> (</div>
+              <div className="editor-code-line pl-8 text-white/60">{'<div className="panel">'}</div>
+              <div className="editor-code-line pl-12">...</div>
             </div>
 
             {/* AI Highlight Tooltip */}

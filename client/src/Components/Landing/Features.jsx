@@ -1,4 +1,27 @@
+import React, { useRef } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export default function Features() {
+  const container = useRef(null);
+
+  useGSAP(() => {
+    gsap.from('.feature-card', {
+      scrollTrigger: {
+        trigger: container.current,
+        start: 'top 80%',
+      },
+      y: 50,
+      opacity: 0,
+      duration: 0.8,
+      stagger: 0.15,
+      ease: 'power3.out'
+    });
+  }, { scope: container });
+
   const features = [
     {
       icon: "🤖",
@@ -33,7 +56,7 @@ export default function Features() {
   ];
 
   return (
-    <section className="w-full max-w-7xl mx-auto px-6 py-24">
+    <section ref={container} className="w-full max-w-7xl mx-auto px-6 py-24">
       <div className="mb-16 border-l-2 border-white pl-6">
         <h2 className="text-3xl md:text-4xl font-mono font-bold tracking-tight text-white mb-4 uppercase">
           ENGINEERED FOR IMPACT.
@@ -47,7 +70,7 @@ export default function Features() {
         {features.map((feature, index) => (
           <div 
             key={index} 
-            className="p-10 border border-white/10 hover:bg-white/[0.02] transition-colors duration-300 group"
+            className="feature-card p-10 border border-white/10 hover:bg-white/[0.02] transition-colors duration-300 group"
           >
             <div className="w-10 h-10 border border-white/20 mb-8 flex items-center justify-center text-white/70 group-hover:text-white transition-colors">
               {feature.icon}

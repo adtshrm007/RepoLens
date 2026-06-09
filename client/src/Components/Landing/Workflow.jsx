@@ -1,4 +1,27 @@
+import React, { useRef } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+
+gsap.registerPlugin(ScrollTrigger);
+
 export default function Workflow() {
+  const container = useRef(null);
+
+  useGSAP(() => {
+    gsap.from('.workflow-step', {
+      scrollTrigger: {
+        trigger: container.current,
+        start: 'top 75%',
+      },
+      y: 40,
+      opacity: 0,
+      duration: 0.8,
+      stagger: 0.2,
+      ease: 'back.out(1.7)'
+    });
+  }, { scope: container });
+
   const steps = [
     {
       number: "01",
@@ -23,7 +46,7 @@ export default function Workflow() {
   ];
 
   return (
-    <section className="w-full py-32 px-6 flex flex-col items-center">
+    <section ref={container} className="w-full py-32 px-6 flex flex-col items-center">
       <div className="text-center mb-20">
         <h2 className="text-3xl md:text-4xl font-mono font-bold tracking-tight text-white mb-4 uppercase">
           UNIFIED INTELLIGENCE WORKFLOW.
@@ -38,7 +61,7 @@ export default function Workflow() {
         <div className="hidden md:block absolute top-12 left-0 w-full h-[1px] bg-white/10 z-0"></div>
 
         {steps.map((step, index) => (
-          <div key={index} className="flex flex-col items-center text-center relative z-10 group">
+          <div key={index} className="workflow-step flex flex-col items-center text-center relative z-10 group">
             <div className="w-24 h-24 mb-6 border border-white/20 bg-[#0a0a0c] flex items-center justify-center group-hover:border-white/50 transition-colors duration-300">
               <span className="font-mono text-xl text-white">{step.number}</span>
             </div>
