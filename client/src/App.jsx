@@ -1,11 +1,4 @@
-import Navbar from './Components/Landing/Navbar';
-import Hero from './Components/Landing/Hero';
-import EditorMockup from './Components/Landing/EditorMockup';
-import Logos from './Components/Landing/Logos';
-import Workflow from './Components/Landing/Workflow';
-import Features from './Components/Landing/Features';
-import CallToAction from './Components/Landing/CallToAction';
-import Footer from './Components/Landing/Footer';
+import Home from './pages/Home';
 import './App.css';
 
 function App() {
@@ -21,16 +14,7 @@ function App() {
       <div className="absolute top-40 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-2xl opacity-20 animate-blob animation-delay-4000"></div>
       
       <div className="relative z-10">
-        <Navbar />
-        <main>
-          <Hero />
-          <EditorMockup />
-          <Logos />
-          <Workflow />
-          <Features />
-          <CallToAction />
-        </main>
-        <Footer />
+        <Home />
       </div>
     </div>
   );
