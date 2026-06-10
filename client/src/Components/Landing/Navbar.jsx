@@ -1,3 +1,4 @@
+import logo from "../../assets/RepoLensLogo.svg"
 export default function Navbar() {
   return (
     <nav className="w-full border-b border-white/10 bg-[#0a0a0c] backdrop-blur-md sticky top-0 z-50">
@@ -5,7 +6,7 @@ export default function Navbar() {
         {/* Logo */}
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-white text-black flex items-center justify-center font-bold text-xs">
-            1
+            <img src={logo} alt="logo" />
           </div>
           <span className="text-white font-mono font-bold tracking-widest text-sm">REPOLENS</span>
         </div>
