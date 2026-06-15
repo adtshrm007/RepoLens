@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id String @id @default(cuid())
+
+  name  String
+  email String @unique
+
+  password String?
+
+  provider String @default("custom")
+
+  profilePic String?
+
+  githubId String? @unique
+
+  githubToken String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  repositories Repository[]
+}
+
+model Repository {
+  id String @id @default(cuid())
+
+  name String
+
+  fullName String
+
+  githubRepoId String
+
+  repoUrl String
+
+  isPrivate Boolean
+
+  language String?
+
+  createdAt DateTime @default(now())
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id])
+
+  analyses Analysis[]
+}
+
+model Analysis {
+  id String @id @default(cuid())
+
+  repositoryId String
+
+  overallScore Float?
+
+  securityScore Float?
+
+  maintainabilityScore Float?
+
+  status String
+
+  createdAt DateTime @default(now())
+
+  repository Repository @relation(fields: [repositoryId], references: [id])
+
+  findings Finding[]
+}
+
+model Finding {
+  id String @id @default(cuid())
+
+  analysisId String
+
+  category String
+
+  severity String
+
+  issue String
+
+  reason String
+
+  suggestion String
+
+  filePath String
+
+  lineNumber Int?
+
+  codeSnippet String?
+
+  analysis Analysis @relation(fields: [analysisId], references: [id])
+}
