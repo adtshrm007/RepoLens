@@ -5,6 +5,9 @@ import express from "express";
 const app = express();
 app.use(express.json());
 
+import cookieParser from "cookie-parser";
+app.use(cookieParser());
+
 import prisma from "./src/utils/prisma.util.js";
 
 const port = process.env.PORT || 5000;
@@ -15,7 +18,6 @@ app.use("/user", userRouter);
 app.use("/", (req, res) => {
   res.send("HI!!!!!!!!!!");
 });
-
 
 app.listen(port, () => {
   try {
