@@ -1,10 +1,12 @@
 import prisma from "../utils/prisma.util.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import {
   isStrongPassword,
   isValidEmail,
   isValidName,
 } from "../utils/auth.utils.js";
+import { generateTokensAndLogin } from "../services/auth.service.js";
 
 export const registerUser = async (req, res) => {
   try {
@@ -49,5 +51,40 @@ export const registerUser = async (req, res) => {
   }
 };
 
+export const loginUser = async (req, res) => {
+  try {
+    const email = req.body.email?.toLowerCase();
+    const password = req.body.password;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "All fields are required.",
+      });
+    }
 
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Invalid Credentials.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid Credentials.",
+      });
+    }
+
+    await generateTokensAndLogin(user, res);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Server Error.",
+    });
+  }
+};
