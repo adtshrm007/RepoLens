@@ -14,9 +14,10 @@ export const verifyToken = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: {
-        password: false,
-      },
+      omit:{
+        password:true,
+        refreshToken:true
+      }
     });
 
     if (!user) {
@@ -27,7 +28,7 @@ export const verifyToken = async (req, res, next) => {
 
     req.user = user;
 
-    next();
+    return next();
   } catch (error) {
     return res.status(401).json({
       message: "Token verification failed",
