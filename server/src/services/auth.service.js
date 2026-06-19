@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 import prisma from "../utils/prisma.util.js";
 
-
 export const generateTokensAndLogin = async (user, res) => {
   const accessToken = jwt.sign(
     {
@@ -14,7 +13,7 @@ export const generateTokensAndLogin = async (user, res) => {
     },
   );
 
-  const refreshToken = jwt.sign(
+  const appRefreshToken = jwt.sign(
     {
       id: user.id,
     },
@@ -26,7 +25,7 @@ export const generateTokensAndLogin = async (user, res) => {
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { refreshToken },
+    data: { appRefreshToken },
   });
 
   res.cookie("accessToken", accessToken, {
@@ -35,7 +34,7 @@ export const generateTokensAndLogin = async (user, res) => {
     sameSite: "strict",
   });
 
-  res.cookie("refreshToken", refreshToken, {
+  res.cookie("refreshToken", appRefreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",

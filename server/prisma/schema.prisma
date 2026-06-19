@@ -13,23 +13,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+enum AuthProvider{
+  CUSTOM
+  GOOGLE
+  GITHUB
+}
+
+
 model User {
   id String @id @default(cuid())
 
-  name  String
+  name String
   email String @unique
 
   password String?
 
-  provider String @default("custom")
+  provider AuthProvider @default(CUSTOM)
 
   profilePic String?
 
   githubId String? @unique
+  googleId String? @unique
 
-  githubToken String?
+  githubAccessToken String?
+  githubRefreshToken String?
 
-  refreshToken String?
+  appRefreshToken String?
+
+  isEmailVerified Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
