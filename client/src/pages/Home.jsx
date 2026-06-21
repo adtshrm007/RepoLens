@@ -1,18 +1,18 @@
 import Navbar from "../Components/common/Navbar";
-import Hero from "../components/landing/Hero";
-import EditorMockup from "../components/landing/EditorMockup";
-import Logos from "../components/landing/Logos";
-import Workflow from "../components/landing/Workflow";
-import Features from "../components/landing/Features";
-import CallToAction from "../components/landing/CallToAction";
-import Footer from "../components/landing/Footer";
+import Hero from "../Components/landing/Hero";
+import EditorMockup from "../Components/landing/EditorMockup";
+import Logos from "../Components/landing/Logos";
+import Workflow from "../Components/landing/Workflow";
+import Features from "../Components/landing/Features";
+import CallToAction from "../Components/landing/CallToAction";
+import Footer from "../Components/landing/Footer";
 
 function Home() {
   return (
     <>
       <div className="min-h-screen bg-black text-white selection:bg-white/30 relative overflow-hidden">
         {/* Animated Background Top Gradient */}
-        <div className="absolute top-0 left-0 w-full h-[150vh] bg-gradient-to-b from-[#1a1a24] via-[#0a0a0c] to-black animate-gradient pointer-events-none"></div>
+        <div className="absolute top-0 left-0 w-full h-[150vh] bg-linear-to-b from-[#1a1a24] via-[#0a0a0c] to-black animate-gradient pointer-events-none"></div>
 
         {/* Animated Background Blobs */}
         <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-2xl opacity-20 animate-blob"></div>
