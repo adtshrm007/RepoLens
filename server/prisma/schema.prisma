@@ -1,9 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// This is your Prisma schema file
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,19 +8,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-enum AuthProvider{
+enum AuthProvider {
   CUSTOM
   GOOGLE
   GITHUB
 }
 
-
 model User {
   id String @id @default(cuid())
 
-  name String
-  email String @unique
+  name     String
+  email    String @unique
+  username String?
 
   password String?
 
@@ -33,10 +27,10 @@ model User {
 
   profilePic String?
 
-  githubId String? @unique
-  googleId String? @unique
+  githubId    String? @unique
+  googleId    String? @unique
 
-  githubAccessToken String?
+  githubAccessToken  String?
   githubRefreshToken String?
 
   appRefreshToken String?
@@ -47,28 +41,23 @@ model User {
   updatedAt DateTime @updatedAt
 
   repositories Repository[]
+  fileDocs     FileDocumentation[]
 }
 
 model Repository {
   id String @id @default(cuid())
 
-  name String
-
-  fullName String
-
+  name         String
+  fullName     String
   githubRepoId String
-
-  repoUrl String
-
-  isPrivate Boolean
-
-  language String?
+  repoUrl      String
+  isPrivate    Boolean
+  language     String?
 
   createdAt DateTime @default(now())
 
   userId String
-
-  user User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   analyses Analysis[]
 }
@@ -78,13 +67,12 @@ model Analysis {
 
   repositoryId String
 
-  overallScore Float?
-
-  securityScore Float?
-
+  overallScore         Float?
+  securityScore        Float?
   maintainabilityScore Float?
 
-  status String
+  status  String
+  summary String?
 
   createdAt DateTime @default(now())
 
@@ -98,21 +86,32 @@ model Finding {
 
   analysisId String
 
-  category String
-
-  severity String
-
-  issue String
-
-  reason String
-
-  suggestion String
-
-  filePath String
-
-  lineNumber Int?
-
+  category    String
+  severity    String
+  issue       String
+  reason      String
+  suggestion  String
+  filePath    String
+  lineNumber  Int?
   codeSnippet String?
 
   analysis Analysis @relation(fields: [analysisId], references: [id])
+}
+
+model FileDocumentation {
+  id           String @id @default(cuid())
+  
+  repoFullName String // e.g. "owner/repoName"
+  filePath     String
+  
+  purpose      String?
+  architecture String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, repoFullName, filePath])
 }
