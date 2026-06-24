@@ -106,6 +106,7 @@ model FileDocumentation {
   
   purpose      String?
   architecture String?
+  source       String @default("analysis") // "analysis" or "explorer"
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
