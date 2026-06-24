@@ -54,13 +54,23 @@ const NAV = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, setIsOpen }) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   return (
-    <aside
-      className="fixed left-0 top-0 h-full flex flex-col z-40"
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+      <aside
+        className={`fixed left-0 top-0 h-full flex flex-col z-50 transition-transform duration-300 md:translate-x-0 ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       style={{
         width: "200px",
         background: "rgba(5,5,8,0.85)",
@@ -92,6 +102,7 @@ export default function Sidebar() {
             key={item.path + item.label}
             to={item.path}
             end={item.path === "/dashboard"}
+            onClick={() => setIsOpen(false)}
             className={({ isActive }) =>
               `flex items-center gap-3 px-6 py-2.5 transition-all cursor-pointer ${
                 isActive
@@ -156,5 +167,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

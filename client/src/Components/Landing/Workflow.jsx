@@ -26,22 +26,22 @@ export default function Workflow() {
     {
       number: "01",
       title: "CONNECT",
-      description: "LINK YOUR REPOSITORIES WITH SECURE OAUTH LOGINS."
+      description: "SIGN IN AND LINK YOUR GITHUB REPOSITORIES SECURELY."
     },
     {
       number: "02",
-      title: "SCAN",
-      description: "AUTOMATED PARSING OF FILES AND DEPENDENCIES."
+      title: "SELECT",
+      description: "BROWSE YOUR FILE TREE AND PICK THE FILES TO ANALYZE."
     },
     {
       number: "03",
-      title: "ANALYZE",
-      description: "NEURAL MODELS EXTRACT LOGIC AND ARCHITECTURE."
+      title: "SCAN",
+      description: "AI EXTRACTS BUGS, SECURITY RISKS, AND ARCHITECTURE."
     },
     {
       number: "04",
-      title: "INSIGHTS",
-      description: "DISPLAY METRICS AND ACTIONABLE FIXES."
+      title: "REVIEW",
+      description: "GET DETAILED REPORTS AND AUTO-GENERATED DOCUMENTATION."
     }
   ];
 

@@ -48,8 +48,9 @@ export default function AnalysisHistory() {
               </div>
             </div>
           ) : (
-            <table className="w-full text-left data-table border-collapse">
-              <thead>
+            <div className="overflow-x-auto pb-2">
+              <table className="w-full text-left data-table border-collapse min-w-[600px]">
+                <thead>
                 <tr>
                   <th>Job ID / Date</th>
                   <th>Target Repository</th>
@@ -119,6 +120,7 @@ export default function AnalysisHistory() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

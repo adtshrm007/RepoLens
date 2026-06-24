@@ -1,7 +1,7 @@
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Link } from "react-router-dom";
 
-export default function DashboardNavbar() {
+export default function DashboardNavbar({ toggleSidebar }) {
   const { user } = useAuth();
 
   return (
@@ -13,12 +13,23 @@ export default function DashboardNavbar() {
         borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <div className="w-full max-w-[1200px] mx-auto px-6 flex items-center justify-between">
-        {/* Search */}
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 h-8"
-          style={{ width: "260px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
+      <div className="w-full max-w-[1200px] mx-auto px-4 md:px-6 flex items-center justify-between gap-4">
+        {/* Left: Mobile Hamburger & Search */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={toggleSidebar}
+            className="md:hidden text-white/50 hover:text-white transition-colors p-1 flex-shrink-0"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          {/* Search */}
+          <div
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 h-8"
+            style={{ width: "260px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
           <svg
             className="w-3 h-3 shrink-0"
             style={{ color: "rgba(255,255,255,0.25)" }}
@@ -35,6 +46,7 @@ export default function DashboardNavbar() {
             className="bg-transparent border-none outline-none font-mono w-full placeholder-white/25 text-white"
             style={{ fontSize: "11px" }}
           />
+        </div>
         </div>
 
         {/* Right: user + settings */}

@@ -162,24 +162,40 @@ export default function CodeExplorer() {
   // Load repos on mount if in repo mode
   useEffect(() => {
     if (inputMode === "repo" && repos.length === 0) {
-      setReposLoading(true);
-      api.get("/repos")
-        .then(({ data }) => setRepos(data || []))
-        .catch(() => {})
-        .finally(() => setReposLoading(false));
+      const fetchRepos = async () => {
+        setReposLoading(true);
+        try {
+          const { data } = await api.get("/repos");
+          setRepos(data || []);
+        } catch (err) {
+          if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+            setError("Your GitHub connection has expired.");
+          }
+        }
+        setReposLoading(false);
+      };
+      fetchRepos();
     }
-  }, [inputMode]);
+  }, [inputMode, repos.length]);
 
   // When a repo is selected, load root files
   useEffect(() => {
     if (!selectedRepo) return;
-    setRootLoading(true);
-    setRootFiles([]);
-    setSelectedRepoFile(null);
-    api.get(`/repos/${selectedRepo.owner}/${selectedRepo.name}/files`)
-      .then(({ data }) => setRootFiles(data.files || []))
-      .catch(() => {})
-      .finally(() => setRootLoading(false));
+    const fetchFiles = async () => {
+      setRootLoading(true);
+      setRootFiles([]);
+      setSelectedRepoFile(null);
+      try {
+        const { data } = await api.get(`/repos/${selectedRepo.owner}/${selectedRepo.name}/files`);
+        setRootFiles(data.files || []);
+      } catch (err) {
+        if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+          setError("Your GitHub connection has expired.");
+        }
+      }
+      setRootLoading(false);
+    };
+    fetchFiles();
   }, [selectedRepo]);
 
   const handleFileUpload = (e) => {
@@ -223,7 +239,11 @@ export default function CodeExplorer() {
       }
       setResult(data.explanation);
     } catch (err) {
-      setError(err?.response?.data?.message || "Exploration failed.");
+      if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+        setError("Your GitHub connection has expired.");
+      } else {
+        setError(err?.response?.data?.message || "Exploration failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -279,16 +299,12 @@ export default function CodeExplorer() {
         </div>
 
         {/* ── Body ── */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden", gap: 0 }}>
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
           {/* ── Left Panel: Input ── */}
           <div
+            className="w-full md:w-[340px] shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-white/[0.07] min-h-[350px] md:min-h-0"
             style={{
-              width: "340px",
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-              borderRight: "1px solid rgba(255,255,255,0.07)",
               overflow: "hidden",
             }}
           >
@@ -528,9 +544,23 @@ export default function CodeExplorer() {
                   fontSize: "10px",
                   color: "#ef4444",
                   flexShrink: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "10px",
+                  textAlign: "center"
                 }}
               >
                 {error}
+                {error === "Your GitHub connection has expired." && (
+                  <a
+                    href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/github`}
+                    className="px-4 py-2 bg-[#ef4444] text-white font-mono text-[10px] font-bold uppercase tracking-[0.1em] hover:bg-[#ef4444]/90 transition-colors rounded"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Reconnect GitHub
+                  </a>
+                )}
               </div>
             )}
 
@@ -607,6 +637,9 @@ export default function CodeExplorer() {
                 {/* Tab bar */}
                 <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
                   <TabBtn active={resultTab === "overview"} onClick={() => setResultTab("overview")}>Overview</TabBtn>
+                  <TabBtn active={resultTab === "functions"} onClick={() => setResultTab("functions")}>
+                    Functions {result.functions ? `(${result.functions.length})` : ""}
+                  </TabBtn>
                   <TabBtn active={resultTab === "lines"} onClick={() => setResultTab("lines")}>
                     Notable Lines {result.notableLines ? `(${result.notableLines.length})` : ""}
                   </TabBtn>
@@ -635,16 +668,136 @@ export default function CodeExplorer() {
                       )}
                       {/* Improvements */}
                       {result.improvements?.length > 0 && (
-                        <div style={{ padding: "16px 20px", background: "rgba(10,10,20,0.7)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "6px" }}>
-                          <h3 style={{ margin: "0 0 10px", fontFamily: "monospace", fontSize: "10px", color: "#34d399", letterSpacing: "0.15em", textTransform: "uppercase" }}>High-Level Improvements</h3>
-                          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "8px" }}>
-                            {result.improvements.map((imp, idx) => (
-                              <li key={idx} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-                                <span style={{ color: "#34d399", fontSize: "12px", flexShrink: 0, marginTop: "1px" }}>→</span>
-                                <span style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.65)", lineHeight: "1.6" }}>{imp}</span>
-                              </li>
-                            ))}
-                          </ul>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          <h3 style={{ margin: "0 0 4px", fontFamily: "monospace", fontSize: "10px", color: "#34d399", letterSpacing: "0.15em", textTransform: "uppercase" }}>High-Level Improvements</h3>
+                          {result.improvements.map((imp, idx) => {
+                            // Support both new structured objects and old plain strings
+                            const isObj = imp && typeof imp === "object";
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  padding: "14px 16px",
+                                  background: "rgba(10,10,20,0.7)",
+                                  border: "1px solid rgba(255,255,255,0.07)",
+                                  borderLeft: "2px solid #34d399",
+                                  borderRadius: "4px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "8px",
+                                }}
+                              >
+                                {isObj ? (
+                                  <>
+                                    {/* Problem description */}
+                                    <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                                      <span style={{ color: "#34d399", fontSize: "11px", flexShrink: 0, marginTop: "1px" }}>⚑</span>
+                                      <span style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.75)", lineHeight: "1.6", fontWeight: "500" }}>
+                                        {imp.what}
+                                      </span>
+                                    </div>
+                                    {/* Code quote */}
+                                    {imp.codeQuote && (
+                                      <pre
+                                        style={{
+                                          margin: 0,
+                                          padding: "8px 12px",
+                                          background: "rgba(0,0,0,0.5)",
+                                          border: "1px solid rgba(234,179,8,0.2)",
+                                          borderLeft: "3px solid #eab308",
+                                          borderRadius: "3px",
+                                          fontFamily: "monospace",
+                                          fontSize: "11px",
+                                          color: "#eab308",
+                                          whiteSpace: "pre-wrap",
+                                          wordBreak: "break-all",
+                                          lineHeight: "1.5",
+                                        }}
+                                      >
+                                        {imp.codeQuote}
+                                      </pre>
+                                    )}
+                                    {/* How to fix */}
+                                    {imp.howToFix && (
+                                      <div
+                                        style={{
+                                          padding: "8px 12px",
+                                          background: "rgba(52,211,153,0.05)",
+                                          border: "1px solid rgba(52,211,153,0.15)",
+                                          borderRadius: "3px",
+                                          display: "flex",
+                                          gap: "8px",
+                                          alignItems: "flex-start",
+                                        }}
+                                      >
+                                        <span style={{ fontFamily: "monospace", fontSize: "9px", color: "#34d399", fontWeight: "700", flexShrink: 0, marginTop: "2px", letterSpacing: "0.1em" }}>HOW TO FIX</span>
+                                        <span style={{ fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: "1.6" }}>{imp.howToFix}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  /* Fallback for plain string */
+                                  <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                                    <span style={{ color: "#34d399", fontSize: "12px", flexShrink: 0, marginTop: "1px" }}>→</span>
+                                    <span style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.65)", lineHeight: "1.6" }}>{imp}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── FUNCTIONS TAB ── */}
+                  {resultTab === "functions" && (
+                    <div>
+                      {!result.functions || result.functions.length === 0 ? (
+                        <p style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 0" }}>
+                          No functions identified.
+                        </p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                          {result.functions.map((fn, idx) => {
+                            const compColor = fn.complexity === 'HIGH' ? '#ef4444' : fn.complexity === 'MEDIUM' ? '#eab308' : '#22c55e';
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  background: "rgba(10,10,20,0.7)",
+                                  border: "1px solid rgba(255,255,255,0.07)",
+                                  borderRadius: "6px",
+                                  padding: "16px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "10px"
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: "#8b5cf6" }}>{fn.name}</span>
+                                    <span style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>Lines: {fn.lineRange}</span>
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>Complexity</span>
+                                    <span style={{ color: compColor, fontFamily: "monospace", fontSize: "10px", fontWeight: "700", background: `${compColor}15`, padding: "2px 6px", borderRadius: "3px", border: `1px solid ${compColor}30` }}>{fn.complexity}</span>
+                                  </div>
+                                </div>
+                                
+                                <div style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.75)", lineHeight: "1.6" }}>
+                                  {fn.purpose}
+                                </div>
+
+                                {fn.improvement && (
+                                  <div style={{ marginTop: "4px", padding: "10px 12px", background: "rgba(52,211,153,0.05)", border: "1px solid rgba(52,211,153,0.15)", borderRadius: "4px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                                    <span style={{ fontFamily: "monospace", fontSize: "10px", color: "#34d399", fontWeight: "700", flexShrink: 0, marginTop: "2px" }}>SUGGESTION</span>
+                                    <span style={{ fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: "1.5" }}>{fn.improvement}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                     </div>

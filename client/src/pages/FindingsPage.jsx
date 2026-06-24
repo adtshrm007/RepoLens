@@ -190,7 +190,7 @@ export default function FindingsPage() {
           </div>
 
           {/* Severity pills */}
-          <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", minWidth: "280px" }}>
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[280px]">
             {SEVERITIES.map((sev) => (
               <div
                 key={sev}
@@ -243,10 +243,10 @@ export default function FindingsPage() {
 
         {/* ── FINDINGS TAB ── */}
         {activeTab === "findings" && (
-          <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
             {/* Filter sidebar */}
-            <div style={{ width: "180px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-              <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "6px" }}>Filter</div>
+            <div className="w-full md:w-[180px] shrink-0 flex flex-row md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0">
+              <div className="hidden md:block font-mono text-[9px] text-white/30 tracking-[0.2em] uppercase mb-1">Filter</div>
               {["all", ...SEVERITIES].map((f) => (
                 <button
                   key={f}
@@ -267,16 +267,15 @@ export default function FindingsPage() {
                     alignItems: "center",
                     transition: "all 0.15s",
                   }}
+                  className="shrink-0"
                 >
-                  <span>{f}</span>
-                  {f !== "all" && <span style={{ color: SEV_COLORS[f] }}>{counts[f]}</span>}
-                  {f === "all" && <span style={{ color: "rgba(255,255,255,0.4)" }}>{findings.length}</span>}
+                  {f === "all" ? "All Findings" : f} ({f === "all" ? findings.length : counts[f]})
                 </button>
               ))}
             </div>
 
             {/* Findings list */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}>
+            <div className="flex-1 min-w-0 flex flex-col gap-3">
               {filtered.length === 0 ? (
                 <div style={{ padding: "40px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.15em", textTransform: "uppercase", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}>
                   NO FINDINGS MATCH CURRENT PARAMETERS.
@@ -296,20 +295,103 @@ export default function FindingsPage() {
             {insights.improvementPriorities.length > 0 && (
               <div style={{ padding: "18px 20px", border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.06)", borderRadius: "2px" }}>
                 <SectionHeader color="#a78bfa" label="Top Improvement Priorities" />
-                <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {insights.improvementPriorities.map((item, i) => (
-                    <li key={i} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                      <span style={{
-                        flexShrink: 0, width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center",
-                        fontFamily: "monospace", fontSize: "9px", fontWeight: "700", color: "#a78bfa",
-                        border: "1px solid rgba(139,92,246,0.4)", borderRadius: "2px"
-                      }}>
-                        {i + 1}
-                      </span>
-                      <span style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.6" }}>{item}</span>
-                    </li>
-                  ))}
-                </ol>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {insights.improvementPriorities.map((item, i) => {
+                    const isObj = item && typeof item === "object";
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          border: "1px solid rgba(139,92,246,0.2)",
+                          borderRadius: "4px",
+                          overflow: "hidden",
+                          background: "rgba(0,0,0,0.2)",
+                        }}
+                      >
+                        {/* Priority header */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            padding: "10px 14px",
+                            background: "rgba(139,92,246,0.08)",
+                            borderBottom: isObj && (item.problem || item.codeQuote || item.howToFix) ? "1px solid rgba(139,92,246,0.15)" : "none",
+                          }}
+                        >
+                          <span style={{
+                            flexShrink: 0, width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center",
+                            fontFamily: "monospace", fontSize: "10px", fontWeight: "700", color: "#a78bfa",
+                            border: "1px solid rgba(139,92,246,0.4)", borderRadius: "2px",
+                          }}>
+                            {i + 1}
+                          </span>
+                          <span style={{ fontFamily: "monospace", fontSize: "12px", fontWeight: "700", color: "#c4b5fd" }}>
+                            {isObj ? item.title || `Priority ${i + 1}` : item}
+                          </span>
+                        </div>
+
+                        {isObj && (
+                          <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {/* Problem */}
+                            {item.problem && (
+                              <p style={{ margin: 0, fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.6" }}>
+                                {item.problem}
+                              </p>
+                            )}
+                            {/* Code Quote */}
+                            {item.codeQuote && (
+                              <div>
+                                <div style={{ fontFamily: "monospace", fontSize: "8px", color: "rgba(234,179,8,0.7)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "4px" }}>
+                                  ↳ Affected Code
+                                </div>
+                                <pre
+                                  style={{
+                                    margin: 0,
+                                    padding: "8px 12px",
+                                    background: "rgba(0,0,0,0.5)",
+                                    border: "1px solid rgba(234,179,8,0.2)",
+                                    borderLeft: "3px solid #eab308",
+                                    borderRadius: "3px",
+                                    fontFamily: "monospace",
+                                    fontSize: "11px",
+                                    color: "#eab308",
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-all",
+                                    lineHeight: "1.5",
+                                  }}
+                                >
+                                  {item.codeQuote}
+                                </pre>
+                              </div>
+                            )}
+                            {/* How to Fix */}
+                            {item.howToFix && (
+                              <div
+                                style={{
+                                  padding: "9px 12px",
+                                  background: "rgba(52,211,153,0.05)",
+                                  border: "1px solid rgba(52,211,153,0.15)",
+                                  borderRadius: "3px",
+                                  display: "flex",
+                                  gap: "8px",
+                                  alignItems: "flex-start",
+                                }}
+                              >
+                                <span style={{ fontFamily: "monospace", fontSize: "8px", color: "#34d399", fontWeight: "700", flexShrink: 0, marginTop: "3px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                                  How to Fix
+                                </span>
+                                <span style={{ fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: "1.6" }}>
+                                  {item.howToFix}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

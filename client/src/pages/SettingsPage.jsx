@@ -70,7 +70,7 @@ export default function SettingsPage() {
           </h2>
 
           <div
-            className="px-4 py-3 flex items-center justify-between"
+            className="px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
             style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
           >
             <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export default function SettingsPage() {
           <h2 className="text-[#ef4444] text-[10px] uppercase tracking-widest mb-3 font-mono font-bold">
             Danger Zone
           </h2>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <span className="text-white/50 text-[10px] font-mono">
               Sever current session connection and clear local cache.
             </span>

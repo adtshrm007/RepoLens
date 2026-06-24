@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export default function CallToAction() {
   return (
     <section className="w-full px-6 py-24 relative z-10 border-t border-white/10">
@@ -14,12 +16,12 @@ export default function CallToAction() {
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-4">
-          <button className="w-full sm:w-auto bg-white text-black text-xs font-mono font-bold tracking-widest px-8 py-4 hover:bg-white/90 transition-colors">
-            CONNECT GITHUB
-          </button>
-          <button className="w-full sm:w-auto bg-transparent border border-white/20 text-white text-xs font-mono font-bold tracking-widest px-8 py-4 hover:bg-white/5 transition-colors">
-            UPLOAD CODE FILE
-          </button>
+          <Link to="/auth" className="w-full sm:w-auto bg-white text-black text-xs font-mono font-bold tracking-widest px-8 py-4 hover:bg-white/90 transition-colors text-center inline-block">
+            GET STARTED
+          </Link>
+          <Link to="/explorer" className="w-full sm:w-auto bg-transparent border border-white/20 text-white text-xs font-mono font-bold tracking-widest px-8 py-4 hover:bg-white/5 transition-colors text-center inline-block">
+            TRY EXPLORER
+          </Link>
         </div>
       </div>
     </section>

@@ -15,10 +15,14 @@ export default function RepoExplorer() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   
-  const [activeTab, setActiveTab] = useState("explorer"); // "explorer" | "documentation"
+  const [activeTab, setActiveTab] = useState("explorer"); // "explorer" | "documentation" | "techstack"
   const [docs, setDocs] = useState(null);
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsError, setDocsError] = useState("");
+
+  const [techStack, setTechStack] = useState(null);
+  const [techStackLoading, setTechStackLoading] = useState(false);
+  const [techStackError, setTechStackError] = useState("");
 
   useEffect(() => {
     const fetchRepo = async () => {
@@ -29,8 +33,12 @@ export default function RepoExplorer() {
         ]);
         setRepoInfo(repoRes.data);
         setRootFiles(filesRes.data?.files || []);
-      } catch {
-        setError("ACCESS DENIED OR REPOSITORY UNAVAILABLE.");
+      } catch (err) {
+        if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+          setError("Your GitHub connection has expired.");
+        } else {
+          setError("Failed to fetch repository data.");
+        }
       } finally {
         setLoading(false);
       }
@@ -62,37 +70,65 @@ export default function RepoExplorer() {
         }
       });
     } catch (err) {
-      alert("Analysis failed.");
+      if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+        setError("Your GitHub connection has expired.");
+      } else {
+        alert("Analysis failed.");
+      }
       setRunning(false);
     }
   };
 
-  const loadDocumentation = async () => {
-    if (docs) return; // already loaded
-    setDocsLoading(true);
-    setDocsError("");
-    try {
-      const { data } = await api.post("/analysis/generate-docs", { owner, repoName: repo });
-      setDocs(data.markdown);
-    } catch (err) {
-      setDocsError(err?.response?.data?.message || "Failed to generate documentation.");
-    } finally {
-      setDocsLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     if (activeTab === "documentation") {
-      loadDocumentation();
+      const fetchDocs = async () => {
+        if (docs) return;
+        setDocsLoading(true);
+        setDocsError("");
+        try {
+          const { data } = await api.post("/analysis/generate-docs", { owner, repoName: repo });
+          setDocs(data.markdown);
+        } catch (err) {
+          if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+            setError("Your GitHub connection has expired.");
+          } else {
+            setDocsError(err?.response?.data?.message || "Failed to generate documentation.");
+          }
+        } finally {
+          setDocsLoading(false);
+        }
+      };
+      fetchDocs();
+    } else if (activeTab === "techstack") {
+      const fetchStack = async () => {
+        if (techStack) return;
+        setTechStackLoading(true);
+        setTechStackError("");
+        try {
+          const { data } = await api.get(`/repos/${owner}/${repo}/tech-stack`);
+          setTechStack(data);
+        } catch (err) {
+          if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+            setError("Your GitHub connection has expired.");
+          } else {
+            setTechStackError(err?.response?.data?.message || "Failed to load tech stack.");
+          }
+        } finally {
+          setTechStackLoading(false);
+        }
+      };
+      fetchStack();
     }
-  }, [activeTab]);
+  }, [activeTab, docs, techStack, owner, repo]);
 
   return (
     <DashboardLayout>
       <div className="space-y-4 animate-fade-up h-full flex flex-col">
         {/* ── Header Block ── */}
         <div
-          className="px-4 py-3 flex items-center justify-between shrink-0"
+          className="px-4 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0"
           style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
         >
           <div>
@@ -132,18 +168,26 @@ export default function RepoExplorer() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex border-b border-white/10 px-4 shrink-0">
+        <div className="flex border-b border-white/10 px-4 shrink-0 overflow-x-auto custom-scrollbar">
           <button
             onClick={() => setActiveTab("explorer")}
-            className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+            className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors shrink-0 ${
               activeTab === "explorer" ? "text-white border-b-2 border-white" : "text-white/40 hover:text-white/70"
             }`}
           >
             File Explorer
           </button>
           <button
+            onClick={() => setActiveTab("techstack")}
+            className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors shrink-0 ${
+              activeTab === "techstack" ? "text-white border-b-2 border-white" : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Tech Stack & Structure
+          </button>
+          <button
             onClick={() => setActiveTab("documentation")}
-            className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+            className={`px-4 py-2 font-mono text-[10px] uppercase tracking-widest transition-colors shrink-0 ${
               activeTab === "documentation" ? "text-white border-b-2 border-white" : "text-white/40 hover:text-white/70"
             }`}
           >
@@ -152,11 +196,22 @@ export default function RepoExplorer() {
         </div>
 
         {error ? (
-          <div
-            className="p-4 text-center text-[#ef4444] font-mono text-[11px] uppercase tracking-widest"
-            style={{ border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.03)" }}
-          >
-            {error}
+          <div className="p-4 flex flex-col items-center justify-center">
+            <div
+              className="p-4 text-center text-[#ef4444] font-mono text-[11px] uppercase tracking-widest mb-4"
+              style={{ border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.03)" }}
+            >
+              {error}
+            </div>
+            {error === "Your GitHub connection has expired." && (
+              <a
+                href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/github`}
+                className="px-6 py-2.5 bg-white text-black font-mono text-[11px] font-bold uppercase tracking-[0.2em] hover:bg-white/90 transition-colors"
+                style={{ textDecoration: "none" }}
+              >
+                Reconnect GitHub
+              </a>
+            )}
           </div>
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center">
@@ -165,12 +220,12 @@ export default function RepoExplorer() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex gap-4 overflow-hidden pb-4 px-4">
+          <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-y-auto lg:overflow-hidden pb-4 px-4">
             {activeTab === "explorer" && (
               <>
                 {/* File Tree */}
                 <div
-                  className="w-[300px] flex flex-col shrink-0"
+                  className="w-full lg:w-[300px] flex flex-col shrink-0 min-h-[300px] lg:min-h-0"
                   style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
                 >
                   <div
@@ -194,7 +249,7 @@ export default function RepoExplorer() {
 
                 {/* Actions Panel */}
                 <div
-                  className="flex-1 p-4 flex flex-col relative overflow-hidden"
+                  className="flex-1 p-4 flex flex-col relative overflow-hidden min-h-[300px] lg:min-h-0 shrink-0"
                   style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
                 >
                   {/* bg icon */}
@@ -225,7 +280,7 @@ export default function RepoExplorer() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between shrink-0 z-10">
+                  <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shrink-0 z-10 gap-3">
                     <div className="text-[10px] text-white/40 font-mono uppercase tracking-widest">
                       Total Files: <span className="text-white">{selectedFiles.length}</span>
                     </div>
@@ -286,6 +341,95 @@ export default function RepoExplorer() {
                       })}
                     </div>
                   ) : null}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "techstack" && (
+              <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden pb-4 px-4">
+                {/* Tech Stack Panel */}
+                <div className="flex-1 flex flex-col overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+                  <div className="p-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-mono">Tech Stack (package.json)</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {techStackLoading ? (
+                      <div className="h-full flex items-center justify-center text-white/40 font-mono text-[10px] animate-pulse uppercase tracking-widest">
+                        ANALYZING DEPENDENCIES_
+                      </div>
+                    ) : techStackError ? (
+                      <div className="h-full flex items-center justify-center text-[#ef4444] font-mono text-[11px] uppercase tracking-widest">
+                        {techStackError}
+                      </div>
+                    ) : techStack ? (
+                      <div className="space-y-6">
+                        {techStack.dependencies && Object.keys(techStack.dependencies).length > 0 && (
+                          <div>
+                            <h3 className="text-white font-mono font-bold text-[11px] uppercase tracking-widest mb-3 text-emerald-400">Dependencies</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(techStack.dependencies).map(([name, version]) => (
+                                <div key={name} className="px-3 py-1.5 bg-emerald-400/5 border border-emerald-400/20 rounded font-mono text-[10px] flex items-center gap-2">
+                                  <span className="text-white/80">{name}</span>
+                                  <span className="text-emerald-400/60">{version}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {techStack.devDependencies && Object.keys(techStack.devDependencies).length > 0 && (
+                          <div>
+                            <h3 className="text-white font-mono font-bold text-[11px] uppercase tracking-widest mb-3 text-yellow-500">Dev Dependencies</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(techStack.devDependencies).map(([name, version]) => (
+                                <div key={name} className="px-3 py-1.5 bg-yellow-500/5 border border-yellow-500/20 rounded font-mono text-[10px] flex items-center gap-2">
+                                  <span className="text-white/80">{name}</span>
+                                  <span className="text-yellow-500/60">{version}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {techStack.scripts && Object.keys(techStack.scripts).length > 0 && (
+                          <div>
+                            <h3 className="text-white font-mono font-bold text-[11px] uppercase tracking-widest mb-3 text-blue-400">Scripts</h3>
+                            <div className="flex flex-col gap-2">
+                              {Object.entries(techStack.scripts).map(([name, cmd]) => (
+                                <div key={name} className="px-3 py-2 bg-blue-400/5 border border-blue-400/20 rounded font-mono text-[10px] flex flex-col gap-1">
+                                  <span className="text-blue-400 font-bold">{name}</span>
+                                  <span className="text-white/50 truncate" title={cmd}>{cmd}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(!techStack.dependencies || Object.keys(techStack.dependencies).length === 0) &&
+                         (!techStack.devDependencies || Object.keys(techStack.devDependencies).length === 0) &&
+                         (!techStack.scripts || Object.keys(techStack.scripts).length === 0) && (
+                          <div className="text-white/30 font-mono text-[10px] uppercase tracking-widest text-center py-8">
+                            No package.json data found.
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* File Tree Panel */}
+                <div className="w-full lg:w-[350px] flex flex-col shrink-0 min-h-[300px] lg:min-h-0" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+                  <div className="p-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-mono">Repository Structure (Root)</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/20">
+                    <div className="font-mono text-[11px] space-y-1">
+                      <div className="text-white/60 mb-2 font-bold">{repo}/</div>
+                      {rootFiles.map(f => (
+                        <div key={f.path} className="flex items-center gap-2 pl-4 py-0.5">
+                          <span className="text-white/30">{f.type === 'dir' ? '📁' : '📄'}</span>
+                          <span className={f.type === 'dir' ? 'text-white/70' : 'text-white/50'}>{f.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

@@ -25,33 +25,33 @@ export default function Features() {
   const features = [
     {
       icon: "🤖",
-      title: "AI CODE REVIEW",
-      description: "CONTEXT-AWARE PR ANALYSIS THAT UNDERSTANDS ARCHITECTURE, INTENT, AND CROSS-FILE DEPENDENCIES."
+      title: "AI STATIC ANALYSIS",
+      description: "GET LINE-BY-LINE FEEDBACK ON MAINTAINABILITY, STRUCTURE, AND BEST PRACTICES DIRECTLY FROM AN EXPERT AI."
     },
     {
       icon: "🛡️",
-      title: "SECURITY INTELLIGENCE",
-      description: "SECURE STATIC ANALYSIS, ZERO-DAY VULNERABILITY SCANNING, AND SECRET LEAK PREVENTION."
-    },
-    {
-      icon: "📊",
-      title: "REPOSITORY ANALYSIS",
-      description: "FULL CONTEXT CODEBASE MAPPING. UNDERSTAND HOW DATA FLOWS BETWEEN YOUR MICROSERVICES."
+      title: "SECURITY AUDITING",
+      description: "AUTOMATICALLY DETECT VULNERABILITIES, UNSAFE OPERATIONS, AND BAD SECURITY PRACTICES IN YOUR SOURCE CODE."
     },
     {
       icon: "📄",
-      title: "DOC GENERATOR",
-      description: "AUTOMATED SYNCHRONIZATION BETWEEN YOUR SOURCE CODE AND DOCUMENTATION. ALWAYS UP TO DATE."
+      title: "AUTO-DOCUMENTATION",
+      description: "REPOLENS BUILDS A KNOWLEDGE BASE OF YOUR FILE PURPOSES TO GENERATE COMPREHENSIVE REPO DOCUMENTATION."
     },
     {
-      icon: "🕸️",
-      title: "ARCHITECTURE VISUALIZATION",
-      description: "AUTO-GENERATED DEPENDENCY GRAPHS THAT REVEAL BOTTLENECKS AND CIRCULAR DEPENDENCIES INSTANTLY."
+      icon: "🔍",
+      title: "MANUAL CODE EXPLORER",
+      description: "DON'T WANT TO CONNECT GITHUB? PASTE YOUR CODE DIRECTLY INTO THE EXPLORER FOR INSTANT LINE-BY-LINE ANALYSIS."
     },
     {
       icon: "📈",
-      title: "HEALTH ANALYTICS",
-      description: "CODE QUALITY ENGINEERING METRICS. TRACK DORA METRICS AND TECHNICAL DEBT OVER TIME."
+      title: "HEALTH SCORING",
+      description: "GET AN INSTANT 0-100 HEALTH AND MAINTAINABILITY SCORE FOR ANY SELECTION OF FILES TO TRACK TECHNICAL DEBT."
+    },
+    {
+      icon: "🏗️",
+      title: "ARCHITECTURE INSIGHTS",
+      description: "DISCOVER TIGHT COUPLING, SEPARATION OF CONCERNS VIOLATIONS, AND RECEIVE CONCRETE RESTRUCTURING ADVICE."
     }
   ];
 
@@ -59,10 +59,10 @@ export default function Features() {
     <section ref={container} className="w-full max-w-7xl mx-auto px-6 py-24">
       <div className="mb-16 border-l-2 border-white pl-6">
         <h2 className="text-3xl md:text-4xl font-mono font-bold tracking-tight text-white mb-4 uppercase">
-          ENGINEERED FOR IMPACT.
+          KNOW YOUR CODE INSIDE OUT.
         </h2>
         <p className="text-xs font-mono text-white/50 tracking-widest uppercase">
-          PROFESSIONAL GRADE TOOLS FOR REPOSITORY MASTERY.
+          EVERYTHING YOU NEED TO AUDIT, IMPROVE, AND DOCUMENT YOUR REPOSITORIES.
         </p>
       </div>
 

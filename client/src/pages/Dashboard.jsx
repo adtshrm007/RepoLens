@@ -17,14 +17,20 @@ export default function Dashboard() {
       try {
         const [reposRes, historyRes] = await Promise.all([
           api.get("/repos").catch(() => ({ data: [] })),
-          api.get("/analysis/history").catch(() => ({ data: { analyses: [] } })),
+          api.get("/analysis/history").catch(() => ({ data: [] })),
         ]);
 
+        // /repos returns GitHub live repos (array) — use length for count
         const repos = Array.isArray(reposRes.data) ? reposRes.data : (reposRes.data?.repos || []);
-        const analyses = historyRes.data?.analyses || [];
+        // /analysis/history returns a plain array
+        const analyses = Array.isArray(historyRes.data)
+          ? historyRes.data
+          : (historyRes.data?.analyses || []);
+
         const totalFindings = analyses.reduce((sum, a) => sum + (a.findings?.length || 0), 0);
-        const score = analyses.length
-          ? Math.round(analyses.reduce((sum, a) => sum + (a.overallScore || 0), 0) / analyses.length)
+        const validScores = analyses.filter((a) => a.overallScore != null);
+        const score = validScores.length
+          ? Math.round(validScores.reduce((sum, a) => sum + a.overallScore, 0) / validScores.length)
           : null;
 
         setStats({ repos: repos.length, analyses: analyses.length, findings: totalFindings, score });
@@ -119,7 +125,7 @@ export default function Dashboard() {
 
         {/* Stats */}
         <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.01)" }}>
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/[0.06]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.06]">
             {statCards.map((s) => (
               <div key={s.label} className="p-4 relative">
                 <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-mono mb-2">{s.label}</h3>
@@ -156,12 +162,14 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : recent.length > 0 ? (
-              <table className="w-full text-left data-table border-collapse">
-                <thead>
+              <div className="overflow-x-auto pb-2">
+                <table className="w-full text-left data-table border-collapse min-w-[500px]">
+                  <thead>
                   <tr>
                     <th>Repository</th>
                     <th>Status</th>
                     <th>Issues</th>
+                    <th>Date</th>
                     <th className="text-right">Score</th>
                   </tr>
                 </thead>
@@ -179,20 +187,38 @@ export default function Dashboard() {
                       </td>
                       <td>
                         <span
-                          style={{ border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}
-                          className="text-[8px] px-1.5 py-0.5 uppercase tracking-widest text-white/50"
+                          style={{
+                            border: `1px solid ${a.status?.toLowerCase() === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.12)'}`,
+                            background: a.status?.toLowerCase() === 'completed' ? 'rgba(34,197,94,0.07)' : 'rgba(255,255,255,0.03)'
+                          }}
+                          className={`text-[8px] px-1.5 py-0.5 uppercase tracking-widest ${
+                            a.status?.toLowerCase() === 'completed' ? 'text-green-400/70' : 'text-white/50'
+                          }`}
                         >
-                          {a.status || "Complete"}
+                          {a.status || 'Complete'}
                         </span>
                       </td>
                       <td>{a.findings?.length || 0}</td>
-                      <td className="text-right font-bold text-white">
-                        {a.overallScore != null ? Math.round(a.overallScore) : "—"}
+                      <td className="text-white/30 text-[9px]">
+                        {a.createdAt
+                          ? new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                          : '—'}
+                      </td>
+                      <td className="text-right">
+                        <span
+                          className={`font-bold font-mono text-sm ${
+                            a.overallScore >= 80 ? 'text-green-400' :
+                            a.overallScore >= 60 ? 'text-yellow-400' : 'text-red-400'
+                          }`}
+                        >
+                          {a.overallScore != null ? Math.round(a.overallScore) : '—'}
+                        </span>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <svg className="w-8 h-8 text-white/10 mb-3" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
@@ -258,30 +284,37 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Getting Started — only shown when no analyses */}
-            {!loading && stats.analyses === 0 && (
-              <div className="p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <h2 className="text-white/40 font-mono text-[10px] uppercase tracking-widest mb-3">Getting Started</h2>
-                <ol className="space-y-2.5">
-                  {[
-                    "Go to Repositories",
-                    "Open a repo & select files",
-                    "Click Run Analysis",
-                    "Review findings here",
-                  ].map((step, i) => (
-                    <li key={i} className="flex items-center gap-2.5">
-                      <span
-                        className="w-4 h-4 shrink-0 flex items-center justify-center font-mono text-[8px] font-bold"
-                        style={{ border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)" }}
+            {/* Getting Started — always visible */}
+            <div className="p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <h2 className="text-white/40 font-mono text-[10px] uppercase tracking-widest mb-3">Getting Started</h2>
+              <ol className="space-y-2.5">
+                {[
+                  { step: "Go to Repositories", to: "/repositories" },
+                  { step: "Open a repo & select files", to: "/repositories" },
+                  { step: "Click Run Analysis", to: null },
+                  { step: "Review findings here", to: "/analysis" },
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-2.5">
+                    <span
+                      className="w-4 h-4 shrink-0 flex items-center justify-center font-mono text-[8px] font-bold"
+                      style={{ border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)" }}
+                    >
+                      {i + 1}
+                    </span>
+                    {item.to ? (
+                      <Link
+                        to={item.to}
+                        className="text-[10px] font-mono text-white/50 hover:text-white/80 transition-colors hover:underline"
                       >
-                        {i + 1}
-                      </span>
-                      <span className="text-[10px] font-mono text-white/50">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
+                        {item.step}
+                      </Link>
+                    ) : (
+                      <span className="text-[10px] font-mono text-white/50">{item.step}</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </div>
       </div>

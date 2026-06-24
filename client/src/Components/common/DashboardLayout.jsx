@@ -1,7 +1,9 @@
+import { useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import DashboardNavbar from "./DashboardNavbar.jsx";
 
 export default function DashboardLayout({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden relative" style={{ background: "#050508" }}>
       {/* ── Landing-style animated background ── */}
@@ -19,10 +21,10 @@ export default function DashboardLayout({ children }) {
         }}
       />
 
-      <Sidebar />
+      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
-      <div className="flex-1 flex flex-col min-w-0 relative z-10" style={{ marginLeft: 200 }}>
-        <DashboardNavbar />
+      <div className="flex-1 flex flex-col min-w-0 relative z-10 md:ml-[200px]">
+        <DashboardNavbar toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         <main className="flex-1 overflow-auto p-6">
           <div className="max-w-[1200px] mx-auto">
             {children}

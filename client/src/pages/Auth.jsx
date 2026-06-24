@@ -67,12 +67,12 @@ export default function Auth() {
   };
 
   const handleGoogleLogin = useGoogleLogin({
-    flow: "auth-code",
-    onSuccess: async ({ code }) => {
+    flow: "implicit",
+    onSuccess: async ({ access_token }) => {
       setLoading(true);
       setError("");
       try {
-        const { data } = await api.post("/auth/google", { code });
+        const { data } = await api.post("/auth/google", { accessToken: access_token });
         setUser(data.user);
         navigate("/dashboard");
       } catch (err) {

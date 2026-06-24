@@ -5,6 +5,7 @@ import api from "../services/api.js";
 export default function Repositories() {
   const [repos, setRepos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -13,6 +14,11 @@ export default function Repositories() {
         const { data } = await api.get("/repos");
         setRepos(data || []);
       } catch (err) {
+        if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
+          setError("Your GitHub connection has expired.");
+        } else {
+          setError(err?.response?.data?.message || "Failed to fetch repositories.");
+        }
         console.error(err);
       } finally {
         setLoading(false);
@@ -69,18 +75,37 @@ export default function Repositories() {
 
         {/* ── Table Panel ── */}
         <div
-          className="p-4"
-          style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", minHeight: 480 }}
+          className="flex-1 bg-black/40 p-4 lg:p-6 overflow-hidden flex flex-col relative z-10"
+          style={{ border: "1px solid rgba(255,255,255,0.08)" }}
         >
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="text-white/40 font-mono text-[10px] animate-pulse tracking-widest uppercase">
-                LOADING REPOSITORIES_
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-white/40 font-mono text-[10px] animate-pulse uppercase tracking-widest">
+                SCANNING GITHUB REPOSITORIES_
               </div>
             </div>
+          ) : error ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <div
+                className="text-[#ef4444] font-mono text-[11px] uppercase tracking-widest text-center mb-4 p-4"
+                style={{ border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.03)" }}
+              >
+                {error}
+              </div>
+              {error === "Your GitHub connection has expired." && (
+                <a
+                  href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/github`}
+                  className="px-6 py-2.5 bg-white text-black font-mono text-[11px] font-bold uppercase tracking-[0.2em] hover:bg-white/90 transition-colors"
+                  style={{ textDecoration: "none" }}
+                >
+                  Reconnect GitHub
+                </a>
+              )}
+            </div>
           ) : (
-            <table className="w-full text-left data-table border-collapse">
-              <thead>
+            <div className="overflow-x-auto pb-2">
+              <table className="w-full text-left data-table border-collapse min-w-[600px]">
+                <thead>
                 <tr>
                   <th>Repository Name</th>
                   <th>Language</th>
@@ -138,6 +163,7 @@ export default function Repositories() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

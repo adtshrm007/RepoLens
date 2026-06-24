@@ -38,26 +38,35 @@ export default function FindingCard({ finding }) {
 
       {expanded && (
         <div className="border-t border-white/[0.06] p-4 space-y-3 animate-fade-up">
-          <div>
-            <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5">
-              Reason
-            </p>
-            <p className="text-white/70 text-xs font-mono leading-relaxed">{finding.reason}</p>
+          {/* Problem */}
+          <div className="flex gap-2 items-start">
+            <span className="text-emerald-400 text-[11px] shrink-0 mt-[1px]">⚑</span>
+            <span className="font-sans text-[13px] text-white/75 leading-relaxed font-medium">
+              {finding.reason}
+            </span>
           </div>
-          <div>
-            <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5">
-              Suggestion
-            </p>
-            <p className="text-white/70 text-xs font-mono leading-relaxed">{finding.suggestion}</p>
-          </div>
+
+          {/* Code Quote */}
           {finding.codeSnippet && (
             <div>
-              <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-1.5">
-                Code
-              </p>
-              <pre className="bg-black/40 border border-white/[0.06] rounded-lg px-3 py-2.5 text-xs font-mono text-white/60 overflow-x-auto whitespace-pre-wrap break-all">
+              <div className="font-mono text-[8px] text-yellow-500/70 tracking-widest uppercase mb-1">
+                ↳ Affected Code
+              </div>
+              <pre className="m-0 px-3 py-2 bg-black/50 border border-yellow-500/20 border-l-[3px] border-l-yellow-500 rounded font-mono text-[11px] text-yellow-500 whitespace-pre-wrap break-all leading-relaxed">
                 {finding.codeSnippet}
               </pre>
+            </div>
+          )}
+
+          {/* How to Fix */}
+          {finding.suggestion && (
+            <div className="px-3 py-2.5 bg-emerald-400/5 border border-emerald-400/20 rounded flex gap-2 items-start mt-2">
+              <span className="font-mono text-[9px] text-emerald-400 font-bold shrink-0 mt-[2px] tracking-widest uppercase">
+                HOW TO FIX
+              </span>
+              <span className="font-sans text-xs text-white/60 leading-relaxed">
+                {finding.suggestion}
+              </span>
             </div>
           )}
           {finding.lineNumber && (

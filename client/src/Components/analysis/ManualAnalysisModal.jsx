@@ -3,27 +3,13 @@ import api from "../../services/api.js";
 import { useNavigate } from "react-router-dom";
 
 export default function ManualAnalysisModal({ isOpen, onClose }) {
-  const [mode, setMode] = useState("paste"); // "paste" | "upload"
   const [filename, setFilename] = useState("");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
   if (!isOpen) return null;
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setContent(event.target.result);
-    };
-    reader.readAsText(file);
-  };
 
   const handleSubmit = async () => {
     if (!filename || !content) {
@@ -68,21 +54,6 @@ export default function ManualAnalysisModal({ isOpen, onClose }) {
 
         {/* Body */}
         <div className="p-6">
-          <div className="flex mb-4 gap-4">
-            <button
-              onClick={() => setMode("paste")}
-              className={`pb-2 font-mono text-[11px] uppercase tracking-widest transition-colors ${mode === "paste" ? "text-white border-b-2 border-purple-500" : "text-white/40 hover:text-white/70"}`}
-            >
-              Paste Code
-            </button>
-            <button
-              onClick={() => setMode("upload")}
-              className={`pb-2 font-mono text-[11px] uppercase tracking-widest transition-colors ${mode === "upload" ? "text-white border-b-2 border-purple-500" : "text-white/40 hover:text-white/70"}`}
-            >
-              Upload File
-            </button>
-          </div>
-
           {error && (
             <div className="mb-4 p-3 text-red-400 font-mono text-xs" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)" }}>
               {error}
@@ -101,34 +72,15 @@ export default function ManualAnalysisModal({ isOpen, onClose }) {
               />
             </div>
 
-            {mode === "paste" ? (
-              <div>
-                <label className="block text-white/50 font-mono text-[10px] uppercase tracking-widest mb-2">Code Content</label>
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste your code here..."
-                  className="w-full h-48 bg-black/40 border border-white/10 text-white font-mono text-xs p-3 outline-none focus:border-white/30 transition-colors resize-none"
-                />
-              </div>
-            ) : (
-              <div>
-                 <label className="block text-white/50 font-mono text-[10px] uppercase tracking-widest mb-2">Select File</label>
-                 <div 
-                   className="w-full h-48 bg-black/40 border border-dashed border-white/20 flex flex-col items-center justify-center cursor-pointer hover:border-white/40 transition-colors"
-                   onClick={() => fileInputRef.current?.click()}
-                 >
-                   <svg className="w-8 h-8 text-white/30 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                   <span className="text-white/50 font-mono text-[11px]">{filename ? "Click to change file" : "Click to select a file"}</span>
-                   <input 
-                     type="file" 
-                     ref={fileInputRef}
-                     onChange={handleFileUpload} 
-                     className="hidden" 
-                   />
-                 </div>
-              </div>
-            )}
+            <div>
+              <label className="block text-white/50 font-mono text-[10px] uppercase tracking-widest mb-2">Code Content</label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Paste your code here..."
+                className="w-full h-48 bg-black/40 border border-white/10 text-white font-mono text-xs p-3 outline-none focus:border-white/30 transition-colors resize-none"
+              />
+            </div>
           </div>
         </div>
 
