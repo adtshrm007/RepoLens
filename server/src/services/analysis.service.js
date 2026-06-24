@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-export const runAIAnalysis = async (fileContents, filePaths) => {
+// ---------------------------------------------------------------------------
+// Shared OpenRouter call — deduplicated from the 3 near-identical copies
+// ---------------------------------------------------------------------------
+const callOpenRouter = async (prompt, { json = true } = {}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
   const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
@@ -8,48 +11,194 @@ export const runAIAnalysis = async (fileContents, filePaths) => {
     throw new Error("OPENROUTER_API_KEY is not set in environment variables.");
   }
 
-  let prompt = `You are an expert static analysis AI and software engineer. Analyze the following code file(s) and return a JSON object strictly matching the schema below.
+  const body = {
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2, // lower temperature = sticks to what's actually in the code, less generic filler
+  };
+  if (json) body.response_format = { type: "json_object" };
+
+  const response = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    body,
+    {
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  return response.data.choices[0].message.content.trim();
+};
+
+// ---------------------------------------------------------------------------
+// JSON parsing with a retry that actually retries (the original caught the
+// control-character error, "fixed" the string, then threw anyway)
+// ---------------------------------------------------------------------------
+const parseModelJson = (raw) => {
+  let rawJson = raw;
+  const match = rawJson.match(/\{[\s\S]*\}/);
+  if (match) rawJson = match[0];
+  rawJson = rawJson.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
+
+  try {
+    return JSON.parse(rawJson);
+  } catch (e) {
+    if (e.message.includes('control character')) {
+      const repaired = rawJson.replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+      return JSON.parse(repaired); // now actually re-parsed; throws naturally if still broken
+    }
+    throw e;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Line-number validation — drops any AI claim that doesn't match a real line
+// in the real file, instead of trusting it blindly
+// ---------------------------------------------------------------------------
+const buildLineIndex = (fileContents, filePaths) => {
+  const index = {};
+  filePaths.forEach((path, i) => {
+    index[path] = (fileContents[i] || '').split('\n');
+  });
+  return index;
+};
+
+const isValidLine = (lines, lineNumber) =>
+  Array.isArray(lines) && Number.isInteger(lineNumber) && lineNumber >= 1 && lineNumber <= lines.length;
+
+const validateFindings = (findings, lineIndex) => {
+  return (findings || []).filter((f) => {
+    const lines = lineIndex[f.filePath];
+    if (!isValidLine(lines, f.lineNumber)) {
+      console.warn(`Dropped finding "${f.issue}" — line ${f.lineNumber} invalid for ${f.filePath}`);
+      return false;
+    }
+    return true;
+  });
+};
+
+const validateNotableLines = (notableLines, lines) => {
+  return (notableLines || []).filter((nl) => {
+    if (!isValidLine(lines, nl.number)) {
+      console.warn(`Dropped notable line — line ${nl.number} invalid (file has ${lines.length} lines)`);
+      return false;
+    }
+    return true;
+  });
+};
+
+const validateVulnerabilities = (vulnerabilities, lines) => {
+  return (vulnerabilities || [])
+    .map((v) => ({
+      ...v,
+      lineNumbers: (v.lineNumbers || []).filter((n) => isValidLine(lines, n)),
+    }))
+    .filter((v) => v.lineNumbers.length > 0); // drop vuln entirely if every cited line was hallucinated
+};
+
+const validateFunctions = (functions, lines) => {
+  return (functions || []).filter((fn) => {
+    if (!fn.lineRange) return false;
+    const [start, end] = fn.lineRange.split('-').map(Number);
+    if (!isValidLine(lines, start) || !isValidLine(lines, end)) {
+      console.warn(`Dropped function ${fn.name} - lineRange ${fn.lineRange} invalid`);
+      return false;
+    }
+    return true;
+  });
+};
+
+const downgradeHedgedFindings = (findings) => {
+  const hedgePhrases = ["may", "might", "could potentially", "if not properly", "can be exposed"];
+  return (findings || []).map(f => {
+    const hasHedge = hedgePhrases.some(phrase => f.reason.toLowerCase().includes(phrase));
+    if (hasHedge) {
+      return {
+        ...f,
+        severity: "low",
+        issue: `[Unverified] ${f.issue}`
+      };
+    }
+    return f;
+  });
+};
+
+// ---------------------------------------------------------------------------
+// Shared rules block — directly targets hedge language and pattern-matched
+// false positives (e.g. "API key from env vars" flagged with no real issue)
+// ---------------------------------------------------------------------------
+const ACCURACY_RULES = `
+Rules for findings — read carefully:
+- Only report a finding if you can point to the exact problematic code on the cited line and quote it verbatim in the code/snippet field.
+- Do NOT use hedge language: "may", "might", "could potentially", "if not properly secured", "can be exposed". If you are not certain something is a real, concrete problem in THIS code, omit it rather than hedge.
+- The explanation must justify why this specific line, as written, is a problem — not a generic best-practice reminder that would apply to any codebase.
+- Reading a value from process.env is NOT a finding by itself. Only flag it if you can see that value actually being logged, returned in a response, or hardcoded elsewhere in the provided code.
+- Line numbers must exactly match the numbered lines provided below. Do not estimate or round.
+`;
+
+// ---------------------------------------------------------------------------
+// 1. Bulk analysis across one or more files
+// ---------------------------------------------------------------------------
+export const runAIAnalysis = async (fileContents, filePaths) => {
+  let prompt = `You are an expert static analysis AI and senior software engineer. Analyze the following code file(s) thoroughly and return a JSON object strictly matching the schema below.
 Output MUST be strictly valid JSON. Do NOT include unescaped newlines or tabs inside strings. Escape them as \\n and \\t.
 DO NOT include markdown formatting (like \`\`\`json), just return the raw JSON object.
+${ACCURACY_RULES}
+
+Quality bar for every field:
+- "reason" must be 2-4 sentences explaining WHY the specific code on that line is a problem, not a generic reminder.
+- "suggestion" must be a concrete, step-by-step fix (e.g., "Replace X with Y because Z") — include a corrected code snippet inside the string where helpful (escaped as a single line).
+- "codeSnippet" must quote the EXACT problematic code verbatim from the file, not a paraphrase.
+- "summary" must be 3-5 sentences covering: what the codebase does, its overall quality, the most critical risk, and what to prioritise.
+- Each "improvementPriorities" entry must state the PROBLEM, then HOW TO FIX IT, then quote the specific line(s) of code that need changing.
+- "fileSummaries[].purpose" must be 2-3 sentences describing what the file does, what it exports/exposes, and who/what depends on it.
+- "fileSummaries[].architecture" must name the specific design patterns used (e.g., Repository Pattern, Factory, Singleton, MVC controller) and explain how they manifest in the code.
 
 Schema:
 {
   "findings": [
     {
-      "category": "String (one of: MAINTAINABILITY, SECURITY, RELIABILITY, PERFORMANCE, BUG, BEST_PRACTICE, STRUCTURE)",
+      "category": "String (one of: MAINTAINABILITY, SECURITY, RELIABILITY, PERFORMANCE, BUG, BEST_PRACTICE, STRUCTURE). Prioritize SECURITY and MAINTAINABILITY. Only report PERFORMANCE, STRUCTURE, or BEST_PRACTICE if significant - do not pad with minor style notes.",
       "severity": "String (critical, high, medium, low)",
-      "issue": "String (short title)",
-      "reason": "String (detailed explanation)",
-      "suggestion": "String (concrete how-to-fix with example if possible)",
+      "issue": "String (short title, max 8 words)",
+      "reason": "String (2-4 sentences: what is wrong and why it matters for THIS specific code)",
+      "suggestion": "String (concrete step-by-step fix with corrected code example where possible)",
       "filePath": "String (path of the file)",
       "lineNumber": "Number (line number where the issue occurs)",
-      "codeSnippet": "String (short snippet of the affected code)"
+      "codeSnippet": "String (exact verbatim snippet of the problematic code from the file)"
     }
   ],
   "score": "Number (0 to 100 overall health score)",
   "maintainabilityScore": "Number (0 to 100, how easy is this codebase to maintain and extend)",
-  "summary": "String (2-3 sentence overall summary of the codebase health)",
+  "summary": "String (3-5 sentences: what the codebase does, overall quality level, most critical risk, top priority)",
   "goodPractices": [
     {
       "title": "String (name of the good practice observed)",
-      "description": "String (where and how it is applied in the code)"
+      "description": "String (2-3 sentences: where exactly in the code it appears, how it is implemented, and why it is beneficial)"
     }
   ],
   "structureIssues": [
     {
       "title": "String (short title of the structural problem)",
-      "description": "String (detailed description of what is wrong structurally)",
-      "recommendation": "String (how to restructure or improve it)"
+      "description": "String (2-3 sentences: what is structurally wrong and the concrete downstream consequence)",
+      "recommendation": "String (specific refactoring steps to fix the structure, referencing actual file/function names)"
     }
   ],
   "improvementPriorities": [
-    "String (top things to improve, ordered by importance, max 5)"
+    {
+      "title": "String (short name of the improvement, max 6 words)",
+      "problem": "String (1-2 sentences describing what the current problem is and why it matters)",
+      "howToFix": "String (concrete, actionable steps to fix it — be specific about what to change, add, or remove)",
+      "codeQuote": "String (the exact line(s) from the code that demonstrate the problem, verbatim)"
+    }
   ],
   "fileSummaries": [
     {
       "filePath": "String (path of the file)",
-      "purpose": "String (concise purpose of the file)",
-      "architecture": "String (architectural patterns or structural role of the file)"
+      "purpose": "String (2-3 sentences: what the file does, what it exports, and who depends on it)",
+      "architecture": "String (specific design patterns used and how they manifest — e.g., 'Uses the Repository Pattern: the exported analyzeRepo function abstracts all DB access behind a clean interface')"
     }
   ]
 }
@@ -73,32 +222,17 @@ Files to analyze:
   });
 
   try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: model,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    let rawJson = response.data.choices[0].message.content.trim();
-    const match = rawJson.match(/\{[\s\S]*\}/);
-    if (match) rawJson = match[0];
-    rawJson = rawJson.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
-
-    const parsed = JSON.parse(rawJson);
+    const raw = await callOpenRouter(prompt);
+    const parsed = parseModelJson(raw);
+    const lineIndex = buildLineIndex(fileContents, filePaths);
+    
+    const validatedFindings = validateFindings(parsed.findings, lineIndex);
+    const finalFindings = downgradeHedgedFindings(validatedFindings);
 
     return {
-      findings: parsed.findings || [],
-      score: parsed.score !== undefined ? parsed.score : 100,
-      maintainabilityScore: parsed.maintainabilityScore !== undefined ? parsed.maintainabilityScore : null,
+      findings: finalFindings,
+      score: parsed.score ?? null,                         // was defaulting to 100 — null is honest about failure
+      maintainabilityScore: parsed.maintainabilityScore ?? null,
       summary: parsed.summary || "Analysis completed.",
       goodPractices: parsed.goodPractices || [],
       structureIssues: parsed.structureIssues || [],
@@ -111,48 +245,72 @@ Files to analyze:
   }
 };
 
+// ---------------------------------------------------------------------------
+// 2. Single-file line-by-line explorer
+// ---------------------------------------------------------------------------
 export const runCodeExplorer = async (filename, content) => {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-
-  if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not set in environment variables.");
-  }
-
-  // Number the lines so the AI can reference them accurately
   const lines = content.split('\n');
   const numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
 
-  const prompt = `You are an expert AI software engineer and security analyst. Analyze the following code file and return a JSON object strictly matching the schema below.
+  const prompt = `You are an expert AI software engineer, code reviewer, and security analyst. Perform a deep, thorough analysis of the following code file and return a JSON object strictly matching the schema below.
 Output MUST be strictly valid JSON. Do NOT include unescaped newlines or tabs inside strings. Escape them as \\n and \\t.
 DO NOT include markdown formatting (like \`\`\`json), just return the raw JSON object.
+${ACCURACY_RULES}
 
+Quality bar — every field must meet this standard:
+- "purpose": Write 3-5 sentences. Explain: (1) what this file does at a high level, (2) what specific problem it solves, (3) what it exports or exposes for other parts of the system, and (4) any important side effects or dependencies it has.
+- "architecture": Write 3-5 sentences. Name the specific design patterns present (e.g., Factory, Singleton, Observer, Repository, MVC, Middleware chain). Explain HOW each pattern manifests in the actual code — reference real function/class names. Describe the data flow through the file.
+- "notableLines[].explanation": Must be 2-3 sentences. Explain WHAT the line does mechanically, WHY it matters in the broader context of the file, and any subtle behavior or edge case worth knowing.
+- "notableLines[].improvement": If present, must state WHAT to change, HOW to change it (with a corrected code example as a single escaped line), and WHY the change improves the code.
+- "improvements[].what": 1-2 sentences describing the current gap or problem.
+- "improvements[].howToFix": Concrete, step-by-step instructions. Reference the actual function/variable names involved. Include a corrected code snippet (escaped as a single line) where helpful.
+- "improvements[].codeQuote": The exact verbatim line(s) from the file that illustrate the problem — copy them character-for-character.
+- "securityReport.summary": 3-4 sentences covering the overall attack surface, what is done well, and what is the most urgent risk.
+- "vulnerabilities[].description": 2-3 sentences — what the vulnerability is, how it can be exploited, and what the impact is.
+- "vulnerabilities[].recommendation": Specific fix steps with corrected code example (escaped as a single line).
+
+IMPORTANT: For the "functions" array, you MUST extract and include EVERY SINGLE function defined in the file. Do not skip any function, no matter how small or trivial it seems. The user wants a complete inventory of all functions.
 IMPORTANT: For the "notableLines" array, ONLY include lines that are interesting, complex, have issues, improvements, or security concerns. Do NOT include every line — only notable ones (max 60 lines). Skip blank lines, simple imports with no issues, and trivial closing braces.
 
 Schema:
 {
-  "purpose": "String - concise description of what this file does",
-  "architecture": "String - design patterns and architectural choices used",
+  "purpose": "String - 3-5 sentence detailed description of what this file does, what it exports, and its role in the system",
+  "architecture": "String - 3-5 sentences naming specific design patterns and explaining how they manifest in the actual code",
+  "functions": [
+    {
+      "name": "String - function name",
+      "lineRange": "String - e.g., '42-67'",
+      "purpose": "String - what the function does",
+      "complexity": "String - LOW, MEDIUM, or HIGH, with a one-line reason",
+      "improvement": "String or null - specific suggestion with reasoning, or null if the function is fine as-is"
+    }
+  ],
   "notableLines": [
     {
       "number": 1,
-      "code": "String - the exact line of code",
-      "explanation": "String - what this line does and why it matters",
-      "improvement": "String or null - specific improvement suggestion for this line",
-      "securityFlag": "String or null - security concern on this line"
+      "code": "String - the exact line of code verbatim",
+      "explanation": "String - 2-3 sentences: what this line does mechanically, why it matters, and any subtle behavior",
+      "improvement": "String or null - if improvable: WHAT to change + HOW (with corrected code example) + WHY it is better",
+      "securityFlag": "String or null - if a security concern: what the risk is, how it could be exploited, and how to fix it"
     }
   ],
-  "improvements": ["String - high-level improvement suggestion for the whole file (max 6)"],
+  "improvements": [
+    {
+      "what": "String - 1-2 sentences describing the current problem or gap in this file",
+      "howToFix": "String - concrete step-by-step fix instructions referencing actual function/variable names, with a corrected code example where possible",
+      "codeQuote": "String - the exact verbatim line(s) from the file that demonstrate the problem"
+    }
+  ],
   "securityReport": {
     "overallRisk": "String - one of: LOW, MEDIUM, HIGH, CRITICAL",
-    "summary": "String - overall security posture summary",
+    "summary": "String - 3-4 sentences: overall attack surface, what is done well, and the most urgent risk",
     "vulnerabilities": [
       {
         "title": "String - vulnerability title",
         "severity": "String - one of: LOW, MEDIUM, HIGH, CRITICAL",
         "lineNumbers": [1],
-        "description": "String - detailed description",
-        "recommendation": "String - how to fix it"
+        "description": "String - 2-3 sentences: what the vulnerability is, how it can be exploited, and the impact",
+        "recommendation": "String - specific fix steps with corrected code example (escaped as a single line)"
       }
     ]
   }
@@ -164,58 +322,31 @@ ${numberedContent}
 `;
 
   try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: model,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    const raw = await callOpenRouter(prompt);
+    const parsed = parseModelJson(raw);
 
-    let rawJson = response.data.choices[0].message.content.trim();
-    const match = rawJson.match(/\{[\s\S]*\}/);
-    if (match) {
-      rawJson = match[0];
-    }
-    
-    rawJson = rawJson.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
+    const securityReport = parsed.securityReport
+      ? { ...parsed.securityReport, vulnerabilities: validateVulnerabilities(parsed.securityReport.vulnerabilities, lines) }
+      : null;
 
-    try {
-      const parsed = JSON.parse(rawJson);
-      return {
-        purpose: parsed.purpose || "",
-        architecture: parsed.architecture || "",
-        notableLines: parsed.notableLines || [],
-        improvements: parsed.improvements || [],
-        securityReport: parsed.securityReport || null
-      };
-    } catch (e) {
-      if (e.message.includes('control character')) {
-        rawJson = rawJson.replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-      }
-      throw e;
-    }
+    return {
+      purpose: parsed.purpose || "",
+      architecture: parsed.architecture || "",
+      functions: validateFunctions(parsed.functions, lines),
+      notableLines: validateNotableLines(parsed.notableLines, lines),
+      improvements: parsed.improvements || [],
+      securityReport,
+    };
   } catch (error) {
     console.error("Error calling OpenRouter API for Code Explorer:", error?.response?.data || error.message);
     throw new Error("Failed to run code explorer AI analysis.");
   }
 };
 
+// ---------------------------------------------------------------------------
+// 3. Repository documentation generator (returns markdown, not JSON)
+// ---------------------------------------------------------------------------
 export const generateRepoDocs = async (repoName, fileDocs) => {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-
-  if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not set in environment variables.");
-  }
-
   const prompt = `You are an expert technical writer and software architect. Write a comprehensive technical documentation markdown file for the repository "${repoName}".
 
 I will provide you with the summaries and architectural notes of various files we have scanned from this repository.
@@ -233,23 +364,16 @@ ${fileDocs.map(doc => `--- ${doc.filePath} ---\nPurpose: ${doc.purpose || 'Unkno
 Return ONLY the markdown text. Do not wrap in JSON. Do not add conversational filler.`;
 
   try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: model,
-        messages: [{ role: "user", content: prompt }]
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    return response.data.choices[0].message.content.trim();
+    return await callOpenRouter(prompt, { json: false });
   } catch (error) {
     console.error("Error generating repo docs:", error?.response?.data || error.message);
     throw new Error("Failed to generate repository documentation.");
   }
+};
+
+// Expose internals for testing
+export const __testing = {
+  validateFindings,
+  downgradeHedgedFindings,
+  validateFunctions
 };
