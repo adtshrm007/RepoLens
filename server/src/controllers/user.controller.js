@@ -6,7 +6,7 @@ import {
   isValidEmail,
   isValidName,
 } from "../utils/auth.utils.js";
-import { generateTokensAndLogin } from "../services/auth.service.js";
+import { generateTokensAndLogin, generateTokensAndRedirect } from "../services/auth.service.js";
 import { verifyGoogleToken } from "../middleware/verifyGoogleToken.middleware.js";
 import { getGitHubAccessToken } from "../utils/github.util.js";
 import axios from "axios";
@@ -174,10 +174,12 @@ export const googleLogin = async (req, res) => {
 //Full GitHub OAuth flow
 export const githubLogin = async (req, res) => {
   try {
+    // 'repo' scope gives access to private repos
+    // 'user:email' gives access to the user's email addresses
     const url =
       `https://github.com/login/oauth/authorize` +
       `?client_id=${process.env.GITHUB_CLIENT_ID}` +
-      `&scope=user:email`;
+      `&scope=repo,user:email`;
 
     return res.redirect(url);
   } catch (error) {
@@ -190,54 +192,88 @@ export const githubCallback = async (req, res) => {
   const code = req.query.code;
 
   try {
+    // 1. Exchange code for access token
     const tokenResponse = await getGitHubAccessToken(code);
-    const access_token = tokenResponse.data.access_token;
+    const access_token = tokenResponse.data?.access_token;
 
-    //Create the instance of octokit
+    if (!access_token) {
+      return res.redirect(`${process.env.CLIENT_URL}/auth?error=github_token_failed`);
+    }
+
+    // 2. Fetch GitHub user profile
     const octokit = new Octokit({ auth: access_token });
+    const { data: githubUser } = await octokit.request("GET /user");
 
-    //fetch the user
-    let user = await octokit.request("GET /user");
-    
-    //creating or updating the user
-    user=await prisma.user.upsert({
-      data:{
-        email:user.email,
-        name:user.name,
-        
+    // 3. GitHub may not expose email on /user — fetch primary verified email separately
+    let email = githubUser.email;
+    if (!email) {
+      try {
+        const { data: emails } = await octokit.request("GET /user/emails");
+        const primary = emails.find((e) => e.primary && e.verified);
+        email = primary?.email || emails[0]?.email || null;
+      } catch {
+        email = null;
       }
-    })
+    }
 
-    // const userResponse = await axios.get("https://api.github.com/user", {
-    //   headers: {
-    //     Authorization: `Bearer ${access_token}`,
-    //     Accept: "application/vnd.github+json",
-    //   },
-    // });
+    if (!email) {
+      return res.redirect(`${process.env.CLIENT_URL}/auth?error=no_email`);
+    }
 
-    // const reposResponse = await axios.get("https://api.github.com/user/repos", {
-    //   headers: {
-    //     Authorization: `Bearer ${access_token}`,
-    //     Accept: "application/vnd.github+json",
-    //   },
-    // });
+    const githubId    = String(githubUser.id);
+    const name        = githubUser.name || githubUser.login;
+    const profilePic  = githubUser.avatar_url || null;
+    const username    = githubUser.login || null;
 
-    // // 3. LOG RAW RESPONSES
-    // console.log("=== GITHUB USER ===");
-    // console.log(userResponse.data);
+    // 4. Find or create the user
+    // First try by githubId (fastest — already linked)
+    let user = await prisma.user.findUnique({ where: { githubId } });
 
-    // console.log("=== GITHUB REPOS ===");
-    // console.log(reposResponse.data);
+    if (!user) {
+      // Check if an account already exists with this email
+      const existingByEmail = await prisma.user.findUnique({ where: { email } });
 
-    // // 4. Send raw data to frontend
-    // res.json({
-    //   user: userResponse.data,
-    //   repos: reposResponse.data,
-    //   token: access_token,
-    // });
+      if (existingByEmail) {
+        // Link GitHub to existing account
+        user = await prisma.user.update({
+          where: { email },
+          data: {
+            githubId,
+            githubAccessToken: access_token,
+            profilePic: profilePic || existingByEmail.profilePic,
+            username: username || existingByEmail.username,
+          },
+        });
+      } else {
+        // Brand new user via GitHub
+        user = await prisma.user.create({
+          data: {
+            name,
+            email,
+            githubId,
+            githubAccessToken: access_token,
+            profilePic,
+            username,
+            provider: "GITHUB",
+          },
+        });
+      }
+    } else {
+      // Already linked — refresh the access token and avatar
+      user = await prisma.user.update({
+        where: { githubId },
+        data: {
+          githubAccessToken: access_token,
+          profilePic: profilePic || user.profilePic,
+        },
+      });
+    }
+
+    // 5. Issue JWT cookies and redirect to dashboard
+    await generateTokensAndRedirect(user, res);
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "OAuth failed" });
+    console.error("GitHub OAuth Error:", err.response?.data || err.message);
+    res.redirect(`${process.env.CLIENT_URL}/auth?error=oauth_failed`);
   }
 };
 
@@ -254,7 +290,8 @@ export const getMe = async (req, res) => {
     const { password, githubAccessToken, githubRefreshToken, appRefreshToken, ...safeUser } = user;
     res.json(safeUser);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Get Me Error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -262,6 +299,55 @@ export const getMe = async (req, res) => {
 // @route   POST /auth/logout
 // @access  Public
 export const logout = (req, res) => {
-  res.cookie("token", "", { httpOnly: true, expires: new Date(0) });
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: new Date(0),
+  };
+  // Clear both cookies set by generateTokensAndLogin / generateTokensAndRedirect
+  res.cookie("accessToken", "", cookieOptions);
+  res.cookie("refreshToken", "", cookieOptions);
   res.status(200).json({ message: "Logged out successfully" });
+};
+
+// @desc    Refresh Access Token
+// @route   POST /auth/refresh
+// @access  Public
+export const refreshToken = async (req, res) => {
+  try {
+    const appRefreshToken = req.cookies?.refreshToken;
+
+    if (!appRefreshToken) {
+      return res.status(401).json({ message: "No refresh token provided" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(appRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+    } catch (error) {
+      return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // Protection against token reuse / hijacked session:
+    if (user.appRefreshToken !== appRefreshToken) {
+      return res.status(401).json({ message: "Refresh token has been revoked or reused" });
+    }
+
+    // Issue new tokens via the service function
+    // generateTokensAndLogin will create new access/refresh tokens, update DB, set cookies
+    // Note: It also sends a 200 JSON response which is what the frontend expects.
+    await generateTokensAndLogin(user, res);
+  } catch (error) {
+    console.error("Refresh Token Error:", error);
+    res.status(500).json({ message: "Server error during token refresh" });
+  }
 };

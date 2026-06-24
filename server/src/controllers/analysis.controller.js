@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma.util.js";
-import { fetchFileContent } from "../services/github.service.js";
+import { fetchFileContent, fetchRepositoryTree } from "../services/github.service.js";
 import { runAIAnalysis, runCodeExplorer, generateRepoDocs } from "../services/analysis.service.js";
 
 // @desc    Run analysis on selected files
@@ -82,6 +82,22 @@ export const runAnalysis = async (req, res) => {
       await Promise.all(
         fileSummaries.map(async (doc) => {
           if (!doc.filePath || (!doc.purpose && !doc.architecture)) return;
+
+          // Precedence logic: Do not overwrite if source is "explorer"
+          const existing = await prisma.fileDocumentation.findUnique({
+            where: {
+              userId_repoFullName_filePath: {
+                userId: user.id,
+                repoFullName: `${owner}/${repoName}`,
+                filePath: doc.filePath,
+              },
+            }
+          });
+
+          if (existing && existing.source === 'explorer') {
+            return; // Skip overwriting explorer documentation with bulk analysis
+          }
+
           await prisma.fileDocumentation.upsert({
             where: {
               userId_repoFullName_filePath: {
@@ -93,6 +109,7 @@ export const runAnalysis = async (req, res) => {
             update: {
               purpose: doc.purpose,
               architecture: doc.architecture,
+              source: "analysis",
             },
             create: {
               userId: user.id,
@@ -100,6 +117,7 @@ export const runAnalysis = async (req, res) => {
               filePath: doc.filePath,
               purpose: doc.purpose,
               architecture: doc.architecture,
+              source: "analysis",
             },
           });
         })
@@ -108,8 +126,11 @@ export const runAnalysis = async (req, res) => {
 
     res.status(201).json({ analysis, maintainabilityScore, goodPractices, structureIssues, improvementPriorities });
   } catch (error) {
+    if (error.message === "GITHUB_TOKEN_EXPIRED") {
+      return res.status(403).json({ code: "GITHUB_TOKEN_EXPIRED", message: "Your GitHub connection has expired." });
+    }
     console.error("Analysis Run Error:", error);
-    res.status(500).json({ message: "Failed to run analysis", error: error.message });
+    res.status(500).json({ message: "Failed to run analysis" });
   }
 };
 
@@ -181,7 +202,7 @@ export const runManualAnalysis = async (req, res) => {
     res.status(201).json({ analysis });
   } catch (error) {
     console.error("Manual Analysis Error:", error);
-    res.status(500).json({ message: "Failed to run manual analysis", error: error.message });
+    res.status(500).json({ message: "Failed to run manual analysis" });
   }
 };
 
@@ -198,7 +219,8 @@ export const getAnalysisHistory = async (req, res) => {
     });
     res.json(history);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch history", error: error.message });
+    console.error("Get History Error:", error);
+    res.status(500).json({ message: "Failed to fetch history" });
   }
 };
 
@@ -207,18 +229,26 @@ export const getAnalysisHistory = async (req, res) => {
 // @access  Private
 export const getAnalysisById = async (req, res) => {
   try {
-    const analysis = await prisma.analysis.findUnique({
-      where: { id: req.params.id },
-      include: { repository: true, findings: true }
+    // Use findFirst with ownership check to prevent IDOR
+    // (users cannot access analyses belonging to other users)
+    const analysis = await prisma.analysis.findFirst({
+      where: {
+        id: req.params.id,
+        repository: { userId: req.user.id },
+      },
+      include: { repository: true, findings: true },
     });
 
     if (!analysis) {
+      // Return 404 regardless of whether it doesn't exist or belongs to another user
+      // (don't reveal that the ID exists but is forbidden)
       return res.status(404).json({ message: "Analysis not found" });
     }
 
     res.json(analysis);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch analysis", error: error.message });
+    console.error("Get Analysis By ID Error:", error);
+    res.status(500).json({ message: "Failed to fetch analysis" });
   }
 };
 
@@ -243,7 +273,7 @@ export const exploreManualCode = async (req, res) => {
     res.status(200).json({ explanation });
   } catch (error) {
     console.error("Explore Manual Code Error:", error);
-    res.status(500).json({ message: "Failed to explore code", error: error.message });
+    res.status(500).json({ message: "Failed to explore code" });
   }
 };
 
@@ -279,24 +309,31 @@ export const exploreRepoFile = async (req, res) => {
         },
         update: {
           purpose: explanation.purpose,
-          architecture: explanation.architecture
+          architecture: explanation.architecture,
+          source: "explorer"
         },
         create: {
           userId: user.id,
           repoFullName: `${owner}/${repoName}`,
           filePath: filePath,
           purpose: explanation.purpose,
-          architecture: explanation.architecture
+          architecture: explanation.architecture,
+          source: "explorer"
         }
       });
     }
 
     res.status(200).json({ explanation, filePath, content });
   } catch (error) {
+    if (error.message === "GITHUB_TOKEN_EXPIRED") {
+      return res.status(403).json({ code: "GITHUB_TOKEN_EXPIRED", message: "Your GitHub connection has expired." });
+    }
     console.error("Explore Repo File Error:", error);
-    res.status(500).json({ message: "Failed to explore repo file", error: error.message });
+    res.status(500).json({ message: "Failed to explore repo file" });
   }
 };
+
+
 
 // @desc    Generate technical documentation for a repository
 // @route   POST /analysis/generate-docs
@@ -333,7 +370,7 @@ export const generateDocs = async (req, res) => {
     res.status(200).json({ markdown: markdownDocs });
   } catch (error) {
     console.error("Generate Docs Error:", error);
-    res.status(500).json({ message: "Failed to generate documentation", error: error.message });
+    res.status(500).json({ message: "Failed to generate documentation" });
   }
 };
 

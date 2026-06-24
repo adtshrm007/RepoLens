@@ -14,6 +14,11 @@ export const fetchUserRepositories = async (accessToken) => {
     });
     return data;
   } catch (error) {
+    if (error.status === 401) {
+      const err = new Error("GITHUB_TOKEN_EXPIRED");
+      err.status = 401;
+      throw err;
+    }
     console.error("Error fetching repositories:", error);
     throw new Error("Failed to fetch repositories from GitHub");
   }
@@ -28,6 +33,11 @@ export const fetchRepositoryDetails = async (accessToken, owner, repo) => {
     });
     return data;
   } catch (error) {
+    if (error.status === 401) {
+      const err = new Error("GITHUB_TOKEN_EXPIRED");
+      err.status = 401;
+      throw err;
+    }
     console.error("Error fetching repository details:", error);
     throw new Error("Failed to fetch repository details");
   }
@@ -51,6 +61,11 @@ export const fetchRepositoryTree = async (accessToken, owner, repo, path = "") =
     }));
     return { files };
   } catch (error) {
+    if (error.status === 401) {
+      const err = new Error("GITHUB_TOKEN_EXPIRED");
+      err.status = 401;
+      throw err;
+    }
     console.error("Error fetching repository tree:", error);
     throw new Error("Failed to fetch repository tree");
   }
@@ -71,6 +86,11 @@ export const fetchFileContent = async (accessToken, owner, repo, path) => {
     }
     throw new Error("Invalid file content type");
   } catch (error) {
+    if (error.status === 401) {
+      const err = new Error("GITHUB_TOKEN_EXPIRED");
+      err.status = 401;
+      throw err;
+    }
     console.error(`Error fetching file content for ${path}:`, error);
     throw new Error(`Failed to fetch content for file: ${path}`);
   }
