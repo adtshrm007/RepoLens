@@ -7,8 +7,9 @@ import {
   githubCallback,
   getMe,
   logout,
+  refreshToken,
 } from "../controllers/user.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { verifyToken } from "../middleware/verifyJWT.middleware.js";
 
 const router = express.Router();
 
@@ -24,7 +25,9 @@ router.get("/github", githubLogin);
 router.get("/github/callback", githubCallback);
 
 // Session
-router.get("/me", protect, getMe);
+router.get("/me", verifyToken, getMe);
 router.post("/logout", logout);
+router.post("/refresh", refreshToken);
 
 export default router;
+

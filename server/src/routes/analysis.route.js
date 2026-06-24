@@ -1,10 +1,10 @@
 import express from "express";
 import { runAnalysis, getAnalysisHistory, getAnalysisById, runManualAnalysis, exploreManualCode, exploreRepoFile, generateDocs } from "../controllers/analysis.controller.js";
-import { protect } from "../middleware/auth.middleware.js";
+import { verifyToken } from "../middleware/verifyJWT.middleware.js";
 
 const router = express.Router();
 
-router.use(protect); // All analysis routes are protected
+router.use(verifyToken); // All analysis routes are protected
 
 router.post("/run", runAnalysis);
 router.post("/manual", runManualAnalysis);
