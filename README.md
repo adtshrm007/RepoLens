@@ -35,30 +35,27 @@
 
 ## 🌐 Overview
 
-**RepoLens** is a full-stack AI code analysis platform that connects directly to your GitHub account, fetches your repositories and files, and runs deep AI-powered analysis via the OpenRouter API (backed by models like GPT-4o Mini). It surfaces concrete findings, security vulnerabilities, improvement priorities with code quotes, and generates full technical documentation — all from a clean, terminal-aesthetic dark UI.
+**RepoLens V1.5** is a full-stack AI code analysis platform designed as a complete **Repository Intelligence Engine**. It connects directly to your GitHub account, scans your entire repository tree, and runs a comprehensive pipeline of static analysis, dependency mapping, and AI-powered intelligence. It surfaces structural insights, security vulnerabilities, complexity metrics, and automatically generates onboarding guides and architecture documentation—all from a clean, terminal-aesthetic dark UI.
 
 The platform supports three distinct workflows:
 
 | Workflow | Description |
 |---|---|
-| **Repo Analysis** | Select multiple files from a connected GitHub repo and run a bulk AI static analysis that produces scored findings, maintainability scores, good practices, and structural issues |
+| **Repository Intelligence Scan (V1.5)** | Scans an entire GitHub repo recursively. Builds a dependency graph (DAG), calculates complexity metrics (dead code, large files), flags security vulnerabilities with actionable recommendations, and uses AI to generate an architecture summary and onboarding guide. |
 | **Code Explorer** | Pick a single file (from a repo or by pasting/uploading) and get a deep line-by-line breakdown — notable lines, security flags, and structured improvement suggestions with code quotes |
-| **Docs Generator** | After analyzing files, synthesize all file-level purpose/architecture summaries into a cohesive technical documentation markdown document |
+| **Docs Generator** | Synthesize file-level purpose and architecture summaries into a cohesive technical documentation markdown document |
 
 ---
 
 ## ✨ Features
 
-### AI Analysis Engine
-- **Health Score** (0–100) — overall codebase quality rating
-- **Maintainability Score** — how easy the codebase is to extend and maintain
-- **Categorized Findings** — `SECURITY`, `PERFORMANCE`, `MAINTAINABILITY`, `RELIABILITY`, `BUG`, `BEST_PRACTICE`, `STRUCTURE`
-- **Severity Levels** — `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` per finding
-- **Exact Code Snippets** — every finding quotes the verbatim problematic line
-- **Step-by-step Suggestions** — concrete how-to-fix instructions with corrected code examples
-- **Good Practices** — recognized patterns done well, with explanations
-- **Structural Issues** — architectural problems with specific refactoring recommendations
-- **Improvement Priorities** — ranked list, each with problem statement + code quote + how to fix
+### Repository Intelligence Engine (V1.5)
+- **Full Repository Scanning** — Recursively fetches the entire repository tree instead of relying on manual file selection.
+- **Dependency Graph (DAG)** — Parses ES6 imports/requires to visually map the architecture of the codebase using `dagre` and `ReactFlow`.
+- **Complexity Metrics** — Calculates deterministic metrics across the repo: Dead code indicators, large file counts (>300 lines), component/hook usage, and maximum nesting depths.
+- **Security Vulnerability Scanner** — Analyzes the codebase for critical/high/medium/low severity vulnerabilities and provides specific **Recommendations** on how to fix them.
+- **AI-Powered Architecture & Onboarding** — Leverages the full repo context (including the dependency graph) to generate accurate architectural summaries and step-by-step onboarding guides.
+- **4-Pillar Health Score** — Grades the repository on Overall Health, Maintainability, Security, and Architecture (0–100).
 
 ### Code Explorer
 - **Line-by-line Analysis** — only notable lines flagged (max 60), not every trivial line
@@ -66,11 +63,6 @@ The platform supports three distinct workflows:
 - **Improvement Cards** — `what` the problem is + `howToFix` with code example + `codeQuote` from the file
 - **Security Report** — overall risk level (`LOW/MEDIUM/HIGH/CRITICAL`) + per-vulnerability analysis with fix recommendations
 - **Purpose & Architecture** — deep, multi-sentence description of the file's role and design patterns
-
-### Repository Documentation
-- Aggregates all `FileDocumentation` records saved during analysis/exploration
-- Synthesizes them into a single cohesive developer-facing markdown document
-- Covers overview, architecture, component structure, and tech stack
 
 ### Authentication
 - **Email + Password** — bcrypt hashing, validation (email format, password strength, name length)
@@ -192,38 +184,19 @@ RepoLens/
 │   │   ├── pages/
 │   │   │   ├── Home.jsx             # Public landing page
 │   │   │   ├── Auth.jsx             # Login + Registration + OAuth buttons
-│   │   │   ├── Dashboard.jsx        # User dashboard with stats + recent analyses
 │   │   │   ├── Repositories.jsx     # List of connected GitHub repositories
 │   │   │   ├── RepoExplorer.jsx     # Browse repo files + trigger bulk analysis
 │   │   │   ├── CodeExplorer.jsx     # Single-file deep analysis + security report
 │   │   │   ├── AnalysisHistory.jsx  # Paginated list of past analyses
 │   │   │   ├── FindingsPage.jsx     # Detailed view of one analysis run
 │   │   │   └── SettingsPage.jsx     # User profile and account settings
-│   │   └── Components/
-│   │       ├── common/
-│   │       │   ├── DashboardLayout.jsx    # Sidebar + navbar shell
-│   │       │   ├── DashboardNavbar.jsx    # Top bar with search + user avatar
-│   │       │   ├── DashboardSidebar.jsx   # Navigation links
-│   │       │   └── ProtectedRoute.jsx     # Route guard using useAuth()
-│   │       ├── analysis/
-│   │       │   ├── FindingCard.jsx        # Collapsible finding with code snippet
-│   │       │   ├── ManualAnalysisModal.jsx # Paste/upload code for quick analysis
-│   │       │   ├── RiskScore.jsx          # Circular score ring component
-│   │       │   └── SeverityBadge.jsx      # Color-coded severity chip
-│   │       ├── repositories/
-│   │       │   ├── FileTree.jsx           # Recursive file tree for repo browsing
-│   │       │   └── RepoCard.jsx           # Repository card with stats
-│   │       ├── dashboard/                 # Dashboard-specific widgets
-│   │       ├── landing/                   # Landing page sections
-│   │       └── ui/                        # Generic UI primitives
-│   ├── index.html
-│   └── package.json
+│   │   └── ...
 │
 └── server/                          # Express backend (Node.js ESM)
-    ├── server.js                    # Entry point: middleware, routes, error handler
+    ├── server.js                    # Entry point
     ├── prisma/
-    │   ├── schema.prisma            # Database schema (5 models)
-    │   └── migrations/              # Prisma migration history
+    │   ├── schema.prisma            # Database schema
+    │   └── migrations/              
     ├── src/
     │   ├── routes/
     │   │   ├── user.route.js        # /auth/* — registration, login, OAuth, session
@@ -282,29 +255,40 @@ All data is stored in PostgreSQL via Prisma. Five models are defined:
 | `isPrivate` | `Boolean` | Access level |
 | `userId` | `String` | FK → `User` |
 
-### `Analysis`
+### `RepositoryScan` (Replaces `Analysis`)
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `String` (cuid) | Primary key |
 | `repositoryId` | `String` | FK → `Repository` |
-| `overallScore` | `Float?` | 0–100 health score |
-| `maintainabilityScore` | `Float?` | 0–100 maintainability |
-| `status` | `String` | e.g. `"Completed"` |
-| `summary` | `String?` | AI-generated summary |
+| `status` | `String` | `"SCANNING"`, `"ANALYZING"`, `"COMPLETED"` |
+| `totalFiles` | `Int` | Total files in repo |
+| `analyzedFiles` | `Int` | Files successfully processed |
+| `summary` | `String?` | Short summary text |
 
-### `Finding`
+### `RepositoryFile` & `FileMetrics`
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `String` (cuid) | Primary key |
-| `analysisId` | `String` | FK → `Analysis` |
-| `category` | `String` | `SECURITY`, `PERFORMANCE`, etc. |
-| `severity` | `String` | `critical`, `high`, `medium`, `low` |
-| `issue` | `String` | Short title |
-| `reason` | `String` | Detailed explanation |
-| `suggestion` | `String` | Step-by-step fix |
-| `filePath` | `String` | Path in the repo |
-| `lineNumber` | `Int?` | Exact line reference |
-| `codeSnippet` | `String?` | Verbatim code from the file |
+| `scanId` | `String` | FK → `RepositoryScan` |
+| `path` | `String` | e.g. `src/App.jsx` |
+| `linesOfCode` | `Int` | Stored in `FileMetrics` |
+| `deadCodeIndicators` | `Int` | Stored in `FileMetrics` |
+| `dependencyCount` | `Int` | Stored in `FileMetrics` |
+
+### `SecurityFinding`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `String` (cuid) | Primary key |
+| `scanId` | `String` | FK → `RepositoryScan` |
+| `type` | `String` | e.g. `"XSS Vulnerability"` |
+| `severity` | `String` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
+| `file` | `String` | File path |
+| `snippet` | `String` | Verbatim code from the file |
+| `description` | `String` | Detailed explanation |
+| `recommendation` | `String?` | Step-by-step fix in Markdown |
+
+### `DependencyGraph`, `HealthScore`, `ArchitectureModel`, `OnboardingGuide`
+These models store the modular outputs generated by the V1.5 `ScannerService` engine. They are tied 1-to-1 with a `RepositoryScan`.
 
 ### `FileDocumentation`
 | Field | Type | Notes |
@@ -343,47 +327,46 @@ All routes are prefixed with the base URL (default: `http://localhost:3000`).
 | `GET` | `/repos/:owner/:repo` | 🔒 JWT | Get details for a specific repository |
 | `GET` | `/repos/:owner/:repo/files` | 🔒 JWT | Get file/folder tree (pass `?path=` for subdirectory) |
 
-### Analysis — `/analysis`
+### Scans — `/scan`
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/analysis/run` | 🔒 JWT | Bulk analysis of selected GitHub repo files |
-| `POST` | `/analysis/manual` | 🔒 JWT | Quick analysis of manually pasted/uploaded code |
-| `POST` | `/analysis/explore` | 🔒 JWT | Deep line-by-line Code Explorer on manual code |
-| `POST` | `/analysis/explore-repo` | 🔒 JWT | Deep Code Explorer on a file fetched from a GitHub repo |
-| `POST` | `/analysis/generate-docs` | 🔒 JWT | Generate markdown documentation for a repo from saved file docs |
-| `GET` | `/analysis/history` | 🔒 JWT | Get all past analyses for the current user |
-| `GET` | `/analysis/:id` | 🔒 JWT | Get a single analysis by ID (IDOR-protected) |
+| `POST` | `/scan/start` | 🔒 JWT | Triggers a full V1.5 Repository Scan |
+| `GET` | `/scan/:id` | 🔒 JWT | Fetches the fully aggregated payload for the V1.5 Dashboard |
+| `GET` | `/scan/:id/status` | 🔒 JWT | Polls the current state of a running scan |
 
-#### `POST /analysis/run` — Request Body
+#### `POST /scan/start` — Request Body
 ```json
 {
   "owner": "github-username",
-  "repoName": "my-repo",
-  "filePaths": ["src/index.js", "src/utils/auth.js"]
+  "repoName": "my-repo"
 }
 ```
 
-#### `POST /analysis/run` — Response
+#### `GET /scan/:id` — Response
 ```json
 {
-  "analysis": {
+  "scan": {
     "id": "cuid",
-    "overallScore": 72,
-    "summary": "...",
-    "findings": [ ... ]
+    "status": "COMPLETED",
+    "analyzedFiles": 120
   },
-  "maintainabilityScore": 68,
-  "goodPractices": [ { "title": "...", "description": "..." } ],
-  "structureIssues": [ { "title": "...", "description": "...", "recommendation": "..." } ],
-  "improvementPriorities": [
-    {
-      "title": "Add input validation",
-      "problem": "The login endpoint does not validate...",
-      "howToFix": "Add a validation middleware using...",
-      "codeQuote": "const { email, password } = req.body;"
-    }
-  ]
+  "metrics": {
+    "totalLines": 14500,
+    "functionCount": 320,
+    "deadCodeIndicators": 3,
+    "largeFilesCount": 2
+  },
+  "healthScore": {
+    "overall": 92,
+    "maintainability": 85,
+    "security": 100,
+    "architecture": 88
+  },
+  "dependencyGraph": { "nodes": [...], "edges": [...] },
+  "securityFindings": [ { "type": "XSS", "severity": "HIGH", "recommendation": "..." } ],
+  "architecture": { "summary": "..." },
+  "onboardingGuide": { "content": "..." }
 }
 ```
 
@@ -591,38 +574,34 @@ All protected routes are wrapped in `ProtectedRoute`, which reads from `AuthCont
 
 ---
 
-## 🤖 AI Analysis Pipeline
-
-The AI engine is entirely contained in [`analysis.service.js`](server/src/services/analysis.service.js). It uses a single `callOpenRouter()` helper (temperature `0.2` for deterministic output) and two specialized prompt functions:
-
-### `runAIAnalysis()` — Bulk Static Analysis
+### `ScannerService` (V1.5 Repository Intelligence Pipeline)
 
 ```
-User selects files
+User triggers /scan/start
       │
       ▼
-fetchFileContent() via GitHub API (Octokit)
+Fetch default branch & repository tree from GitHub
       │
       ▼
-Build numbered prompt:
-  "1: const express = require('express');"
-  "2: ..."
+Fetch contents for valid files (filters binaries/assets)
       │
       ▼
-callOpenRouter() → JSON response
+1. DependencyGraphService: AST parsing for imports/exports
+2. StaticAnalysisService: Complexity metrics, lines, dead code
+3. SecurityScannerService: Pattern-matching & vulnerability heuristics
       │
       ▼
-parseModelJson() → handle control chars, extract JSON object
+ScoringEngineService: Aggregates data to calculate the 4-pillar Health Score
       │
       ▼
-validateFindings() → drop any finding citing a non-existent line number
+generateV1_5Insights() (AI): Ingests the dependency graph and metrics
+to produce an Onboarding Guide and Architectural Summary
       │
       ▼
-Save to DB: Analysis + Findings + FileDocumentation (upsert)
+Saves all relational data to Prisma (FileMetrics, DependencyGraph, SecurityFinding, etc.)
       │
       ▼
-Return to client: findings, scores, goodPractices, structureIssues,
-                  improvementPriorities (with codeQuotes)
+Dashboard calls /scan/:id to retrieve the full payload
 ```
 
 ### `runCodeExplorer()` — Single-file Deep Dive
