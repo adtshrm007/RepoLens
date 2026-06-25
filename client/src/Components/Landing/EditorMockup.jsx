@@ -105,71 +105,42 @@ export default function EditorMockup() {
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-6 h-full">
+          {/* Tabs */}
+          <div className="mockup-element flex items-center gap-1 overflow-x-auto mb-6 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="px-4 py-2 border-b-2 border-[#8b5cf6] text-[#8b5cf6] font-mono font-bold text-[10px] tracking-widest bg-white/[0.02]">
+              OVERVIEW & HEALTH
+            </div>
+            <div className="px-4 py-2 text-white/30 font-mono font-bold text-[10px] tracking-widest">
+              COMPLEXITY METRICS
+            </div>
+            <div className="px-4 py-2 text-white/30 font-mono font-bold text-[10px] tracking-widest">
+              SECURITY FINDINGS
+            </div>
+            <div className="px-4 py-2 text-white/30 font-mono font-bold text-[10px] tracking-widest">
+              ARCHITECTURE GRAPH
+            </div>
+          </div>
+
+          <div className="flex flex-col h-full gap-6">
             
-            {/* Left Column */}
-            <div className="flex flex-col gap-6 w-full md:w-[320px] shrink-0">
-              
-              {/* Score Rings */}
-              <div className="mockup-element flex justify-center gap-8 p-6 rounded-lg border border-white/5 bg-white/[0.01] shadow-inner">
-                <MockScoreRing value={78} label="Health Score" color="#eab308" />
-                <MockScoreRing value={85} label="Maintainability" color="#22c55e" />
+            {/* AI Summary Box */}
+            <div className="mockup-element p-5 border border-purple-500/40 bg-purple-500/5 relative shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-l-4 border-l-purple-500">
+              <div className="font-mono text-[11px] text-purple-500 tracking-[0.2em] uppercase mb-2 font-bold">
+                ◆ WHAT EXACTLY THIS REPOSITORY DOES
               </div>
-
-              {/* Severity Pills Grid */}
-              <div className="mockup-element grid grid-cols-2 gap-3">
-                 {[
-                   { label: 'CRITICAL', count: 0, color: 'text-white/30', border: 'border-white/5', bg: 'bg-white/[0.01]' },
-                   { label: 'HIGH', count: 2, color: 'text-orange-400', border: 'border-orange-500/20', bg: 'bg-orange-500/10' },
-                   { label: 'MEDIUM', count: 5, color: 'text-yellow-400', border: 'border-yellow-500/20', bg: 'bg-yellow-500/10' },
-                   { label: 'LOW', count: 12, color: 'text-white/50', border: 'border-white/5', bg: 'bg-white/[0.02]' }
-                 ].map(sev => (
-                   <div key={sev.label} className={`p-4 rounded-md border ${sev.border} ${sev.bg} flex flex-col gap-1.5 transition-transform hover:-translate-y-0.5 duration-300`}>
-                      <span className={`font-mono text-[9px] tracking-widest uppercase ${sev.color}`}>{sev.label}</span>
-                      <span className={`font-mono text-2xl font-bold ${sev.color}`}>{sev.count}</span>
-                   </div>
-                 ))}
-              </div>
+              <p className="font-sans text-[13px] text-white/90 leading-relaxed">
+                RepoLens is a powerful AI-driven static analysis engine and code documentation generator. Under the hood, it utilizes a modular architecture to scan abstract syntax trees (AST), map dependency graphs, and identify dead code or security vulnerabilities like XSS. The backend orchestrates these pipelines seamlessly before rendering a comprehensive visual dashboard.
+              </p>
             </div>
 
-            {/* Right Column */}
-            <div className="flex flex-col gap-6 flex-1 min-w-0">
-              
-              {/* AI Summary Box */}
-              <div className="mockup-element p-5 rounded-lg border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-transparent relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 shadow-[0_0_10px_#a855f7]"></div>
-                <div className="font-mono text-[10px] text-purple-400 tracking-[0.2em] uppercase mb-3 flex items-center gap-2">
-                  <span className="animate-pulse">◆</span> AI Summary
-                </div>
-                <p className="font-sans text-[13px] text-white/70 leading-relaxed group-hover:text-white/90 transition-colors">
-                  The repository demonstrates solid architectural patterns, but several security vulnerabilities and maintainability issues were found in the core rendering engine. Strict mode violations detected.
-                </p>
-              </div>
-
-              {/* Finding Card Mockup */}
-              <div className="mockup-element flex-1 rounded-lg border border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-transparent p-5 relative overflow-hidden group hover:border-orange-500/40 transition-colors cursor-pointer">
-                 <div className="flex items-center gap-3 mb-4">
-                   <span className="font-mono text-[9px] bg-orange-500/20 text-orange-400 px-2.5 py-1 rounded-sm tracking-widest font-bold">HIGH</span>
-                   <span className="font-mono text-[10px] text-white/40 tracking-widest">SECURITY</span>
-                 </div>
-                 
-                 <h3 className="font-sans font-bold text-[15px] text-white/90 mb-2 group-hover:text-white transition-colors truncate">
-                   Potential XSS vulnerability in dangerouslySetInnerHTML
-                 </h3>
-                 
-                 <p className="font-sans text-[13px] text-white/60 mb-4 line-clamp-2">
-                   User input is being passed directly into dangerouslySetInnerHTML without prior DOMPurify sanitization. This exposes the application to Cross-Site Scripting.
-                 </p>
-                 
-                 <div className="absolute bottom-5 left-5 right-5">
-                   <div className="font-mono text-[10px] text-white/50 bg-black/40 p-2.5 rounded border border-white/5 truncate flex items-center justify-between">
-                      <span className="truncate mr-2">packages/react-dom/src/client/ReactDOMHostConfig.js</span>
-                      <span className="text-orange-400/80 shrink-0">Line 452</span>
-                   </div>
-                 </div>
-              </div>
-
+            {/* Health Scores */}
+            <div className="mockup-element flex flex-wrap justify-between md:justify-start gap-8 p-6 rounded-lg border border-white/5 bg-white/[0.02] shadow-inner">
+              <MockScoreRing value={92} label="Overall" color="#22c55e" />
+              <MockScoreRing value={85} label="Maintain" color="#60a5fa" />
+              <MockScoreRing value={100} label="Security" color="#10b981" />
+              <MockScoreRing value={88} label="Arch" color="#f59e0b" />
             </div>
+
           </div>
 
         </div>

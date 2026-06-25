@@ -8,7 +8,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Repositories from "./pages/Repositories.jsx";
 import RepoExplorer from "./pages/RepoExplorer.jsx";
 import AnalysisHistory from "./pages/AnalysisHistory.jsx";
-import FindingsPage from "./pages/FindingsPage.jsx";
+import V15Dashboard from "./pages/V15Dashboard.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import CodeExplorer from "./pages/CodeExplorer.jsx";
 
@@ -55,10 +55,10 @@ function App() {
             }
           />
           <Route
-            path="/analysis/:id"
+            path="/scan/:id"
             element={
               <ProtectedRoute>
-                <FindingsPage />
+                <V15Dashboard />
               </ProtectedRoute>
             }
           />

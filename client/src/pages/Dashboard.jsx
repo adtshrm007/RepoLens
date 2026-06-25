@@ -179,7 +179,7 @@ export default function Dashboard() {
                       <td className="flex items-center gap-2">
                         <span className="text-white/20 text-[10px]">&lt;&gt;</span>
                         <Link
-                          to={`/analysis/${a.id}`}
+                          to={`/scan/${a.id}`}
                           className="text-white/80 group-hover:text-white transition-colors hover:underline"
                         >
                           {a.repository?.name || "Unknown"}

@@ -32,7 +32,7 @@ export default function Hero() {
 
       {/* Description */}
       <p className="hero-element max-w-2xl text-sm md:text-base font-mono text-white/60 mb-12 uppercase tracking-widest leading-relaxed">
-        Connect your GitHub, select files, and let AI analyze your code for bugs, security risks, and structural issues. Automatically generate technical documentation as you scan.
+        Scan your entire GitHub repository to map its architecture, calculate complexity metrics, discover security vulnerabilities, and automatically generate comprehensive onboarding guides—all powered by AI.
       </p>
 
       {/* Buttons */}

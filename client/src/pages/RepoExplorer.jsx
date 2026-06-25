@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import DashboardLayout from "../Components/common/DashboardLayout.jsx";
-import FileTree from "../Components/repositories/FileTree.jsx";
 import api from "../services/api.js";
 
 export default function RepoExplorer() {
@@ -9,8 +8,6 @@ export default function RepoExplorer() {
   const navigate = useNavigate();
 
   const [repoInfo, setRepoInfo] = useState(null);
-  const [rootFiles, setRootFiles] = useState([]);
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -27,12 +24,10 @@ export default function RepoExplorer() {
   useEffect(() => {
     const fetchRepo = async () => {
       try {
-        const [repoRes, filesRes] = await Promise.all([
-          api.get(`/repos/${owner}/${repo}`),
-          api.get(`/repos/${owner}/${repo}/files`),
+        const [repoRes] = await Promise.all([
+          api.get(`/repos/${owner}/${repo}`)
         ]);
         setRepoInfo(repoRes.data);
-        setRootFiles(filesRes.data?.files || []);
       } catch (err) {
         if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
           setError("Your GitHub connection has expired.");
@@ -46,34 +41,20 @@ export default function RepoExplorer() {
     fetchRepo();
   }, [owner, repo]);
 
-  const handleToggleFile = (path) => {
-    setSelectedFiles((prev) =>
-      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
-    );
-  };
 
   const handleRunAnalysis = async () => {
-    if (selectedFiles.length === 0) return;
     setRunning(true);
     try {
-      const { data } = await api.post("/analysis/run", {
+      const { data } = await api.post("/scan", {
         owner,
         repoName: repo,
-        filePaths: selectedFiles,
       });
-      navigate(`/analysis/${data.analysis.id}`, {
-        state: {
-          maintainabilityScore: data.maintainabilityScore,
-          goodPractices: data.goodPractices,
-          structureIssues: data.structureIssues,
-          improvementPriorities: data.improvementPriorities,
-        }
-      });
+      navigate(`/scan/${data.scanId}`);
     } catch (err) {
       if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
         setError("Your GitHub connection has expired.");
       } else {
-        alert("Analysis failed.");
+        alert("Scan failed.");
       }
       setRunning(false);
     }
@@ -175,7 +156,7 @@ export default function RepoExplorer() {
               activeTab === "explorer" ? "text-white border-b-2 border-white" : "text-white/40 hover:text-white/70"
             }`}
           >
-            File Explorer
+            Scanner
           </button>
           <button
             onClick={() => setActiveTab("techstack")}
@@ -222,94 +203,40 @@ export default function RepoExplorer() {
         ) : (
           <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-y-auto lg:overflow-hidden pb-4 px-4">
             {activeTab === "explorer" && (
-              <>
-                {/* File Tree */}
-                <div
-                  className="w-full lg:w-[300px] flex flex-col shrink-0 min-h-[300px] lg:min-h-0"
-                  style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
-                >
-                  <div
-                    className="p-3 flex justify-between items-center"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
-                  >
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-mono">
-                      File Explorer
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-2 text-[11px]">
-                    <FileTree
-                      owner={owner}
-                      repo={repo}
-                      rootFiles={rootFiles}
-                      selectedFiles={selectedFiles}
-                      onToggleFile={handleToggleFile}
-                    />
-                  </div>
+              <div
+                className="w-full flex flex-col justify-center items-center text-center p-12 shrink-0 min-h-[400px]"
+                style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+              >
+                <div className="mb-6 opacity-30">
+                  <svg className="w-24 h-24 text-white mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
                 </div>
+                
+                <h2 className="text-white font-mono font-bold text-[16px] mb-2 tracking-[0.2em] uppercase">Repository Intelligence Scanner</h2>
+                <p className="text-white/40 font-mono text-[11px] max-w-lg mb-8 leading-relaxed">
+                  Initiate a comprehensive scan of the entire repository. The system will map dependencies, extract architecture diagrams, and evaluate overall code health.
+                </p>
 
-                {/* Actions Panel */}
-                <div
-                  className="flex-1 p-4 flex flex-col relative overflow-hidden min-h-[300px] lg:min-h-0 shrink-0"
-                  style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+                <button
+                  onClick={handleRunAnalysis}
+                  disabled={running}
+                  className="px-8 py-3 text-[12px] font-mono font-bold uppercase tracking-[0.2em] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{
+                    background: running ? "transparent" : "white",
+                    color: running ? "rgba(255,255,255,0.4)" : "black",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!running) e.currentTarget.style.background = "rgba(255,255,255,0.90)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!running) e.currentTarget.style.background = "white";
+                  }}
                 >
-                  {/* bg icon */}
-                  <div className="absolute top-0 right-0 p-16 opacity-[0.03] pointer-events-none">
-                    <svg className="w-64 h-64 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                  </div>
-
-                  <h2 className="text-white font-mono font-bold text-[12px] mb-3">Selected Payload</h2>
-
-                  <div
-                    className="flex-1 p-3 overflow-y-auto z-10"
-                    style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.2)" }}
-                  >
-                    {selectedFiles.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-white/25 text-[10px] uppercase tracking-widest font-mono">
-                        AWAITING FILE SELECTION...
-                      </div>
-                    ) : (
-                      <ul className="space-y-1">
-                        {selectedFiles.map((f) => (
-                          <li key={f} className="text-[11px] text-white/60 font-mono flex items-center gap-2">
-                            <span className="text-white/40">&gt;</span> {f}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shrink-0 z-10 gap-3">
-                    <div className="text-[10px] text-white/40 font-mono uppercase tracking-widest">
-                      Total Files: <span className="text-white">{selectedFiles.length}</span>
-                    </div>
-
-                    <button
-                      onClick={handleRunAnalysis}
-                      disabled={selectedFiles.length === 0 || running}
-                      className="px-6 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      style={{
-                        background: selectedFiles.length === 0 || running ? "transparent" : "white",
-                        color: selectedFiles.length === 0 || running ? "rgba(255,255,255,0.4)" : "black",
-                        border: "1px solid rgba(255,255,255,0.3)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (selectedFiles.length > 0 && !running) {
-                          e.currentTarget.style.background = "rgba(255,255,255,0.90)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedFiles.length > 0 && !running) {
-                          e.currentTarget.style.background = "white";
-                        }
-                      }}
-                    >
-                      {running ? "INITIALIZING SEQUENCE..." : "EXECUTE ANALYSIS"}
-                    </button>
-                  </div>
-                </div>
-              </>
+                  {running ? "INITIALIZING SEQUENCE..." : "SCAN ENTIRE REPOSITORY"}
+                </button>
+              </div>
             )}
 
             {activeTab === "documentation" && (
@@ -411,24 +338,6 @@ export default function RepoExplorer() {
                         )}
                       </div>
                     ) : null}
-                  </div>
-                </div>
-
-                {/* File Tree Panel */}
-                <div className="w-full lg:w-[350px] flex flex-col shrink-0 min-h-[300px] lg:min-h-0" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
-                  <div className="p-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-white/40 font-mono">Repository Structure (Root)</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/20">
-                    <div className="font-mono text-[11px] space-y-1">
-                      <div className="text-white/60 mb-2 font-bold">{repo}/</div>
-                      {rootFiles.map(f => (
-                        <div key={f.path} className="flex items-center gap-2 pl-4 py-0.5">
-                          <span className="text-white/30">{f.type === 'dir' ? '📁' : '📄'}</span>
-                          <span className={f.type === 'dir' ? 'text-white/70' : 'text-white/50'}>{f.name}</span>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </div>

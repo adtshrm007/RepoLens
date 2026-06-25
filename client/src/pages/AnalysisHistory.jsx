@@ -100,7 +100,7 @@ export default function AnalysisHistory() {
                       </td>
                       <td className="text-right">
                         <a
-                          href={`/analysis/${analysis.id}`}
+                          href={`/scan/${analysis.id}`}
                           className="flex items-center justify-end gap-3 text-white/80 hover:text-white transition-colors"
                           style={{ textDecoration: "none" }}
                         >
