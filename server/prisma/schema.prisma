@@ -18,7 +18,7 @@ model User {
   id String @id @default(cuid())
 
   name     String
-  email    String @unique
+  email    String  @unique
   username String?
 
   password String?
@@ -27,8 +27,8 @@ model User {
 
   profilePic String?
 
-  githubId    String? @unique
-  googleId    String? @unique
+  githubId String? @unique
+  googleId String? @unique
 
   githubAccessToken  String?
   githubRefreshToken String?
@@ -59,60 +59,153 @@ model Repository {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  analyses Analysis[]
+  scans RepositoryScan[]
 }
 
-model Analysis {
+model RepositoryScan {
   id String @id @default(cuid())
 
   repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id])
 
-  overallScore         Float?
-  securityScore        Float?
-  maintainabilityScore Float?
-
-  status  String
-  summary String?
+  status        String   // "SCANNING", "ANALYZING", "COMPLETED", "FAILED"
+  totalFiles    Int      @default(0)
+  analyzedFiles Int      @default(0)
+  
+  summary       String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  repository Repository @relation(fields: [repositoryId], references: [id])
-
-  findings Finding[]
+  files            RepositoryFile[]
+  securityFindings SecurityFinding[]
+  healthScore      HealthScore?
+  architecture     ArchitectureModel?
+  onboardingGuide  OnboardingGuide?
+  dependencyGraph  DependencyGraph?
 }
 
-model Finding {
+model RepositoryFile {
   id String @id @default(cuid())
 
-  analysisId String
+  scanId String
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
-  category    String
-  severity    String
-  issue       String
-  reason      String
-  suggestion  String
-  filePath    String
-  lineNumber  Int?
-  codeSnippet String?
+  path            String
+  extension       String
+  size            Int
+  isAnalyzed      Boolean @default(false)
+  importanceScore Int?
 
-  analysis Analysis @relation(fields: [analysisId], references: [id])
+  classification FileClassification?
+  metrics        FileMetrics?
+}
+
+model FileClassification {
+  id String @id @default(cuid())
+  
+  fileId String @unique
+  file   RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  type String // "Context Provider", "Component", "Service", "Route", etc.
+}
+
+model FileMetrics {
+  id String @id @default(cuid())
+  
+  fileId String @unique
+  file   RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  linesOfCode       Int
+  functionCount     Int
+  componentCount    Int
+  hookUsage         Int
+  avgFunctionLength Float
+  largestFunction   Int
+  nestingDepth      Int
+  dependencyCount   Int
+  deadCodeIndicators Int @default(0)
+}
+
+model SecurityFinding {
+  id String @id @default(cuid())
+
+  scanId String
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  type        String
+  severity    String // "CRITICAL", "HIGH", "MEDIUM", "LOW"
+  file        String
+  lineNumber  Int
+  snippet     String
+  description String
+  recommendation String?
+}
+
+model DependencyGraph {
+  id String @id @default(cuid())
+
+  scanId String @unique
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  nodes Json
+  edges Json
+}
+
+model HealthScore {
+  id String @id @default(cuid())
+
+  scanId String @unique
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  maintainability Int
+  security        Int
+  architecture    Int
+  documentation   Int
+  overall         Int
+}
+
+model ArchitectureModel {
+  id String @id @default(cuid())
+
+  scanId String @unique
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  frontendLayer String?
+  apiLayer      String?
+  serviceLayer  String?
+  dataLayer     String?
+  authLayer     String?
+  
+  summary       String?
+}
+
+model OnboardingGuide {
+  id String @id @default(cuid())
+
+  scanId String @unique
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  content     String
+  entryPoints Json
+  moduleFlow  Json
 }
 
 model FileDocumentation {
-  id           String @id @default(cuid())
-  
-  repoFullName String // e.g. "owner/repoName"
+  id String @id @default(cuid())
+
+  repoFullName String
   filePath     String
-  
+
   purpose      String?
   architecture String?
-  source       String @default("analysis") // "analysis" or "explorer"
+  source       String  @default("analysis")
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   @@unique([userId, repoFullName, filePath])
 }
