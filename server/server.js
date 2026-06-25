@@ -24,10 +24,12 @@ const port = process.env.PORT || 3000;
 import userRouter from "./src/routes/user.route.js";
 import reposRouter from "./src/routes/repos.route.js";
 import analysisRouter from "./src/routes/analysis.route.js";
+import scanRouter from "./src/routes/scan.routes.js";
 
 app.use("/auth", userRouter);
 app.use("/repos", reposRouter);
 app.use("/analysis", analysisRouter);
+app.use("/scan", scanRouter);
 
 // ── Health Check ────────────────────────────────────────────────
 app.get("/health", (req, res) => {

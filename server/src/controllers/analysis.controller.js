@@ -1,6 +1,10 @@
 import prisma from "../utils/prisma.util.js";
 import { fetchFileContent, fetchRepositoryTree } from "../services/github.service.js";
-import { runAIAnalysis, runCodeExplorer, generateRepoDocs } from "../services/analysis.service.js";
+import { runAIAnalysis, runCodeExplorer, generateRepoDocs, generateV1_5Insights } from "../services/analysis.service.js";
+import { StaticAnalysisService } from "../services/staticAnalysis.service.js";
+import { DependencyGraphService } from "../services/dependencyGraph.service.js";
+import { SecurityScannerService } from "../services/securityScanner.service.js";
+import { ScoringEngineService } from "../services/scoringEngine.service.js";
 
 // @desc    Run analysis on selected files
 // @route   POST /analysis/run
@@ -19,21 +23,33 @@ export const runAnalysis = async (req, res) => {
     }
 
     // 1. Fetch file contents from GitHub
-    const fileContents = [];
+    const files = [];
     for (const path of filePaths) {
       try {
         const content = await fetchFileContent(user.githubAccessToken, owner, repoName, path);
-        fileContents.push(content);
+        files.push({ path, content });
       } catch (err) {
         console.error(`Skipping ${path}: ${err.message}`);
-        fileContents.push(""); // Push empty if failed, or handle better
       }
     }
 
-    // 2. Run analysis
-    const { findings, score, maintainabilityScore, summary, goodPractices, structureIssues, improvementPriorities, fileSummaries } = await runAIAnalysis(fileContents, filePaths);
+    // 2. Run Deterministic Services
+    const staticAnalyzer = new StaticAnalysisService();
+    const metrics = staticAnalyzer.analyzeFiles(files);
 
-    // 3. Upsert Repository record just to keep track
+    const securityScanner = new SecurityScannerService();
+    const securityFindingsList = securityScanner.scanFiles(files);
+
+    const graphBuilder = new DependencyGraphService();
+    const graph = graphBuilder.buildGraph(files);
+
+    const scoringEngine = new ScoringEngineService(metrics, securityFindingsList);
+    const healthScores = scoringEngine.calculateScores();
+
+    // 3. Trigger AI Explanation Layer
+    const aiInsights = await generateV1_5Insights(metrics, healthScores, securityFindingsList, graph);
+
+    // 4. Upsert Repository record
     let repo = await prisma.repository.findFirst({
       where: { name: repoName, userId: user.id }
     });
@@ -43,7 +59,7 @@ export const runAnalysis = async (req, res) => {
         data: {
           name: repoName,
           fullName: `${owner}/${repoName}`,
-          githubRepoId: `${owner}-${repoName}`, // proxy id since we don't have the real github id here
+          githubRepoId: `${owner}-${repoName}`,
           repoUrl: `https://github.com/${owner}/${repoName}`,
           isPrivate: false,
           userId: user.id,
@@ -51,80 +67,80 @@ export const runAnalysis = async (req, res) => {
       });
     }
 
-    // 4. Save analysis results
+    // 5. Save V1.5 analysis results to Database
     const analysis = await prisma.analysis.create({
       data: {
         repositoryId: repo.id,
-        overallScore: score,
-        maintainabilityScore: maintainabilityScore,
-        summary: summary,
+        overallScore: healthScores.overall,
+        maintainabilityScore: healthScores.maintainability,
+        securityScore: healthScores.security,
+        summary: aiInsights.summary,
         status: "Completed",
-        findings: {
-          create: findings.map((f) => ({
-            category: f.category || "GENERAL",
-            severity: f.severity || "low",
-            issue: f.issue || "Issue",
-            reason: f.reason || "",
-            suggestion: f.suggestion || "",
-            filePath: f.filePath || "",
-            lineNumber: f.lineNumber || null,
-            codeSnippet: f.codeSnippet || "",
-          })),
+        metrics: {
+          create: {
+            totalLines: metrics.totalLines,
+            fileCount: metrics.fileCount,
+            functionCount: metrics.functionCount,
+            avgFunctionLength: metrics.avgFunctionLength,
+            largestFunction: metrics.largestFunction,
+            maxNestingDepth: metrics.maxNestingDepth,
+            componentCount: metrics.componentCount,
+            hookUsageCount: metrics.hookUsageCount,
+            dependencyCount: metrics.dependencyCount,
+            largeFilesCount: metrics.largeFilesCount,
+            largeFunctionsCount: metrics.largeFunctionsCount,
+            deadCodeIndicators: metrics.deadCodeIndicators,
+            duplicateImports: metrics.duplicateImports
+          }
         },
+        securityFindings: {
+          create: securityFindingsList.map(f => ({
+            type: f.type,
+            severity: f.severity,
+            file: f.file,
+            lineNumber: f.lineNumber,
+            snippet: f.snippet,
+            description: f.description
+          }))
+        },
+        dependencyGraph: {
+          create: {
+            nodes: graph.nodes,
+            edges: graph.edges
+          }
+        },
+        healthScore: {
+          create: {
+            maintainability: healthScores.maintainability,
+            security: healthScores.security,
+            documentation: healthScores.documentation,
+            architecture: healthScores.architecture,
+            overall: healthScores.overall
+          }
+        },
+        onboardingGuide: {
+          create: {
+            content: aiInsights.onboardingGuide?.content || "No guide generated.",
+            entryPoints: aiInsights.onboardingGuide?.entryPoints || [],
+            moduleFlow: aiInsights.onboardingGuide?.moduleFlow || []
+          }
+        }
       },
       include: {
-        findings: true,
+        metrics: true,
+        healthScore: true,
+        dependencyGraph: true,
+        securityFindings: true,
+        onboardingGuide: true
       }
     });
 
-    // 5. Upsert file documentations
-    if (fileSummaries && fileSummaries.length > 0) {
-      await Promise.all(
-        fileSummaries.map(async (doc) => {
-          if (!doc.filePath || (!doc.purpose && !doc.architecture)) return;
-
-          // Precedence logic: Do not overwrite if source is "explorer"
-          const existing = await prisma.fileDocumentation.findUnique({
-            where: {
-              userId_repoFullName_filePath: {
-                userId: user.id,
-                repoFullName: `${owner}/${repoName}`,
-                filePath: doc.filePath,
-              },
-            }
-          });
-
-          if (existing && existing.source === 'explorer') {
-            return; // Skip overwriting explorer documentation with bulk analysis
-          }
-
-          await prisma.fileDocumentation.upsert({
-            where: {
-              userId_repoFullName_filePath: {
-                userId: user.id,
-                repoFullName: `${owner}/${repoName}`,
-                filePath: doc.filePath,
-              },
-            },
-            update: {
-              purpose: doc.purpose,
-              architecture: doc.architecture,
-              source: "analysis",
-            },
-            create: {
-              userId: user.id,
-              repoFullName: `${owner}/${repoName}`,
-              filePath: doc.filePath,
-              purpose: doc.purpose,
-              architecture: doc.architecture,
-              source: "analysis",
-            },
-          });
-        })
-      );
-    }
-
-    res.status(201).json({ analysis, maintainabilityScore, goodPractices, structureIssues, improvementPriorities });
+    res.status(201).json({ 
+      analysis, 
+      healthScores, 
+      metrics, 
+      onboardingGuide: analysis.onboardingGuide 
+    });
   } catch (error) {
     if (error.message === "GITHUB_TOKEN_EXPIRED") {
       return res.status(403).json({ code: "GITHUB_TOKEN_EXPIRED", message: "Your GitHub connection has expired." });
@@ -212,12 +228,22 @@ export const runManualAnalysis = async (req, res) => {
 // @access  Private
 export const getAnalysisHistory = async (req, res) => {
   try {
-    const history = await prisma.analysis.findMany({
+    const history = await prisma.repositoryScan.findMany({
       where: { repository: { userId: req.user.id } },
-      include: { repository: true, findings: true },
+      include: { repository: true, securityFindings: true, healthScore: true },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(history);
+
+    const formattedHistory = history.map(scan => ({
+      id: scan.id,
+      createdAt: scan.createdAt,
+      repository: scan.repository,
+      status: scan.status,
+      findings: scan.securityFindings || [],
+      healthScore: scan.healthScore || null
+    }));
+
+    res.json(formattedHistory);
   } catch (error) {
     console.error("Get History Error:", error);
     res.status(500).json({ message: "Failed to fetch history" });
@@ -236,7 +262,15 @@ export const getAnalysisById = async (req, res) => {
         id: req.params.id,
         repository: { userId: req.user.id },
       },
-      include: { repository: true, findings: true },
+      include: { 
+        repository: true, 
+        findings: true,
+        metrics: true,
+        healthScore: true,
+        dependencyGraph: true,
+        securityFindings: true,
+        onboardingGuide: true
+      },
     });
 
     if (!analysis) {
@@ -374,3 +408,65 @@ export const generateDocs = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// V1.5 Architecture Endpoints
+// ---------------------------------------------------------------------------
+
+const getLatestAnalysisData = async (repoId, includeModel) => {
+  const analysis = await prisma.analysis.findFirst({
+    where: { repositoryId: repoId, status: "Completed" },
+    orderBy: { createdAt: "desc" },
+    include: { [includeModel]: true }
+  });
+  return analysis;
+};
+
+export const getLatestMetrics = async (req, res) => {
+  try {
+    const analysis = await getLatestAnalysisData(req.params.repoId, "metrics");
+    if (!analysis || !analysis.metrics) return res.status(404).json({ message: "Metrics not found" });
+    res.json(analysis.metrics);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getLatestHealth = async (req, res) => {
+  try {
+    const analysis = await getLatestAnalysisData(req.params.repoId, "healthScore");
+    if (!analysis || !analysis.healthScore) return res.status(404).json({ message: "Health score not found" });
+    res.json(analysis.healthScore);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getLatestGraph = async (req, res) => {
+  try {
+    const analysis = await getLatestAnalysisData(req.params.repoId, "dependencyGraph");
+    if (!analysis || !analysis.dependencyGraph) return res.status(404).json({ message: "Graph not found" });
+    res.json(analysis.dependencyGraph);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getLatestSecurity = async (req, res) => {
+  try {
+    const analysis = await getLatestAnalysisData(req.params.repoId, "securityFindings");
+    if (!analysis || !analysis.securityFindings) return res.status(404).json({ message: "Security findings not found" });
+    res.json(analysis.securityFindings);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getLatestOnboarding = async (req, res) => {
+  try {
+    const analysis = await getLatestAnalysisData(req.params.repoId, "onboardingGuide");
+    if (!analysis || !analysis.onboardingGuide) return res.status(404).json({ message: "Onboarding guide not found" });
+    res.json(analysis.onboardingGuide);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
