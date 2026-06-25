@@ -5,7 +5,7 @@ const JWT_SECRET = process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET || 
 
 export const protect = async (req, res, next) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.cookies?.accessToken;
 
     if (!token) {
       return res.status(401).json({ message: "Not authorized, no token" });
