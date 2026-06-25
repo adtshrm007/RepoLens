@@ -12,6 +12,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
     "@prisma/client": "6.19.3",
     "axios": "^1.18.0",
     "bcryptjs": "^3.0.3",
