@@ -15,6 +15,7 @@ const callOpenRouter = async (prompt, { json = true } = {}) => {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2, // lower temperature = sticks to what's actually in the code, less generic filler
+    max_tokens: 4000, // Caps the token reservation so OpenRouter doesn't block users on low credits by reserving the model's absolute maximum (16k+)
   };
   if (json) body.response_format = { type: "json_object" };
 
@@ -246,6 +247,49 @@ Files to analyze:
 };
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// V1.5 Architecture: AI Explanation Layer
+// ---------------------------------------------------------------------------
+
+export const generateV1_5Insights = async (repoName, metrics, health, security, graph) => {
+  const prompt = `You are an expert software architect. Analyze the following deterministic metrics, repository structure, and security findings to generate an onboarding guide and comprehensive documentation for the repository "${repoName}".
+  
+Repository Structure (Dependency Graph):
+${JSON.stringify(graph, null, 2)}
+
+Repository Metrics:
+${JSON.stringify(metrics, null, 2)}
+
+Health Scores:
+${JSON.stringify(health, null, 2)}
+
+Security Findings:
+${JSON.stringify(security, null, 2)}
+
+Output strictly valid JSON with this schema:
+{
+  "onboardingGuide": {
+    "content": "String (Markdown formatted text explaining the repository architecture and flow)",
+    "entryPoints": ["String (array of key file paths to start reading)"],
+    "moduleFlow": ["String (array of step-by-step learning modules)"]
+  },
+  "summary": "String (Markdown formatted. Write a comprehensive documentation of the repository. Explain exactly what the repository does, how it works under the hood, its core architecture, and other necessary details to fully understand the project based on the provided metrics and file data. DO NOT use generic placeholders like '[insert project purpose here]'. Infer the actual purpose from the repository name and the file paths.)"
+}
+`;
+
+  try {
+    const rawResult = await callOpenRouter(prompt);
+    return parseModelJson(rawResult);
+  } catch (error) {
+    console.error("V1.5 AI Generation Failed:", error);
+    return {
+      onboardingGuide: { content: "Failed to generate guide.", entryPoints: [], moduleFlow: [] },
+      summary: "Analysis complete, but AI explanation failed."
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
 // 2. Single-file line-by-line explorer
 // ---------------------------------------------------------------------------
 export const runCodeExplorer = async (filename, content) => {
@@ -257,25 +301,25 @@ Output MUST be strictly valid JSON. Do NOT include unescaped newlines or tabs in
 DO NOT include markdown formatting (like \`\`\`json), just return the raw JSON object.
 ${ACCURACY_RULES}
 
-Quality bar — every field must meet this standard:
-- "purpose": Write 3-5 sentences. Explain: (1) what this file does at a high level, (2) what specific problem it solves, (3) what it exports or exposes for other parts of the system, and (4) any important side effects or dependencies it has.
-- "architecture": Write 3-5 sentences. Name the specific design patterns present (e.g., Factory, Singleton, Observer, Repository, MVC, Middleware chain). Explain HOW each pattern manifests in the actual code — reference real function/class names. Describe the data flow through the file.
-- "notableLines[].explanation": Must be 2-3 sentences. Explain WHAT the line does mechanically, WHY it matters in the broader context of the file, and any subtle behavior or edge case worth knowing.
-- "notableLines[].improvement": If present, must state WHAT to change, HOW to change it (with a corrected code example as a single escaped line), and WHY the change improves the code.
-- "improvements[].what": 1-2 sentences describing the current gap or problem.
-- "improvements[].howToFix": Concrete, step-by-step instructions. Reference the actual function/variable names involved. Include a corrected code snippet (escaped as a single line) where helpful.
+Quality bar — every field must meet this standard. DO NOT USE GENERIC OR SHALLOW DESCRIPTIONS:
+- "purpose": Write 4-6 sentences. Do not just say "this is a React component" or "this is a service file". Explain specifically: (1) what exact business or technical problem this file solves, (2) the core logic it implements, (3) what it exports/exposes and how other files interact with it, and (4) any critical side effects, API calls, or state mutations.
+- "architecture": Write 4-6 sentences. Name the specific design patterns present (e.g., Factory, Singleton, Observer, Repository, MVC, Higher-Order Component, Redux middleware). Explain EXACTLY HOW each pattern manifests in this specific code by referencing real function names, variable names, and data structures. Describe the data flow step-by-step.
+- "notableLines[].explanation": Must be 3-4 sentences. Dive deep. Explain WHAT the line does mechanically at a low level, WHY it was written this way instead of a simpler way, how it impacts the broader context of the file, and what edge cases or performance implications it carries.
+- "notableLines[].improvement": If present, must state WHAT to change, HOW to change it (with a concrete, corrected code example as a single escaped line), and WHY the change makes the code more robust, secure, or performant.
+- "improvements[].what": 2-3 sentences describing the current gap, anti-pattern, or technical debt in detail.
+- "improvements[].howToFix": Concrete, step-by-step instructions. Reference the actual function/variable names involved. You MUST include a corrected code snippet (escaped as a single line) that directly replaces the problematic code.
 - "improvements[].codeQuote": The exact verbatim line(s) from the file that illustrate the problem — copy them character-for-character.
-- "securityReport.summary": 3-4 sentences covering the overall attack surface, what is done well, and what is the most urgent risk.
-- "vulnerabilities[].description": 2-3 sentences — what the vulnerability is, how it can be exploited, and what the impact is.
-- "vulnerabilities[].recommendation": Specific fix steps with corrected code example (escaped as a single line).
+- "securityReport.summary": 4-5 sentences covering the specific attack surface of this file, the data it handles (e.g., PII, tokens, user input), what security controls are present, and the most urgent unmitigated risk.
+- "vulnerabilities[].description": 3-4 sentences — explicitly explain the vulnerability mechanism (e.g., "User input from req.body.id is passed directly into a raw SQL query without sanitization"), how an attacker would exploit it, and the worst-case impact.
+- "vulnerabilities[].recommendation": Specific fix steps with a fully corrected code example (escaped as a single line).
 
 IMPORTANT: For the "functions" array, you MUST extract and include EVERY SINGLE function defined in the file. Do not skip any function, no matter how small or trivial it seems. The user wants a complete inventory of all functions.
 IMPORTANT: For the "notableLines" array, ONLY include lines that are interesting, complex, have issues, improvements, or security concerns. Do NOT include every line — only notable ones (max 60 lines). Skip blank lines, simple imports with no issues, and trivial closing braces.
 
 Schema:
 {
-  "purpose": "String - 3-5 sentence detailed description of what this file does, what it exports, and its role in the system",
-  "architecture": "String - 3-5 sentences naming specific design patterns and explaining how they manifest in the actual code",
+  "purpose": "String - 4-6 sentence deep dive into what this file does, what business logic it implements, what it exports, and its role in the system",
+  "architecture": "String - 4-6 sentences naming specific design patterns (e.g., MVC, Singleton, Redux Middleware) and explaining EXACTLY how they manifest using real variable/function names from this file",
   "functions": [
     {
       "name": "String - function name",

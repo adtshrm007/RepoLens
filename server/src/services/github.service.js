@@ -43,21 +43,30 @@ export const fetchRepositoryDetails = async (accessToken, owner, repo) => {
   }
 };
 
-export const fetchRepositoryTree = async (accessToken, owner, repo, path = "") => {
+export const fetchRepositoryTree = async (accessToken, owner, repo) => {
   const octokit = getOctokit(accessToken);
   try {
-    const { data } = await octokit.rest.repos.getContent({
+    // 1. Get the default branch (e.g. main or master)
+    const { data: repoData } = await octokit.rest.repos.get({
       owner,
       repo,
-      path,
     });
-    const raw = Array.isArray(data) ? data : [data];
-    // Normalize to the shape the frontend expects
-    const files = raw.map((item) => ({
-      name: item.name,
+    const defaultBranch = repoData.default_branch;
+
+    // 2. Fetch the recursive tree
+    const { data: treeData } = await octokit.rest.git.getTree({
+      owner,
+      repo,
+      tree_sha: defaultBranch,
+      recursive: '1',
+    });
+
+    // 3. Format the response
+    const files = treeData.tree.map((item) => ({
+      name: item.path.split('/').pop(),
       path: item.path,
-      type: item.type,   // "file" | "dir"
-      size: item.size ?? 0,
+      type: item.type === 'blob' ? 'file' : 'dir',
+      size: item.size || 0,
     }));
     return { files };
   } catch (error) {
@@ -66,7 +75,7 @@ export const fetchRepositoryTree = async (accessToken, owner, repo, path = "") =
       err.status = 401;
       throw err;
     }
-    console.error("Error fetching repository tree:", error);
+    console.error("Error fetching repository tree recursively:", error);
     throw new Error("Failed to fetch repository tree");
   }
 };
@@ -78,8 +87,15 @@ export const fetchFileContent = async (accessToken, owner, repo, path) => {
       owner,
       repo,
       path,
+      mediaType: {
+        format: "raw",
+      },
     });
 
+    if (typeof data === "string") {
+      return data;
+    }
+    // Fallback if it didn't return raw for some reason
     if (data.type === "file" && data.encoding === "base64") {
       const content = Buffer.from(data.content, "base64").toString("utf-8");
       return content;
