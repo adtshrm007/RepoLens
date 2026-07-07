@@ -1,7 +1,8 @@
 import express from "express";
 import { 
   runAnalysis, getAnalysisHistory, getAnalysisById, runManualAnalysis, exploreManualCode, exploreRepoFile, generateDocs,
-  getLatestMetrics, getLatestHealth, getLatestGraph, getLatestSecurity, getLatestOnboarding
+  getLatestMetrics, getLatestHealth, getLatestGraph, getLatestSecurity, getLatestOnboarding,
+  getDashboardStats, compareScansByIds, askAIAssistant, globalSearch
 } from "../controllers/analysis.controller.js";
 import { verifyToken } from "../middleware/verifyJWT.middleware.js";
 
@@ -14,7 +15,11 @@ router.post("/manual", runManualAnalysis);
 router.post("/explore", exploreManualCode);
 router.post("/explore-repo", exploreRepoFile);
 router.post("/generate-docs", generateDocs);
+router.post("/ask", askAIAssistant);
 router.get("/history", getAnalysisHistory);
+router.get("/dashboard-stats", getDashboardStats);
+router.get("/compare", compareScansByIds);
+router.get("/search", globalSearch);
 router.get("/:id", getAnalysisById);
 
 // V1.5 Endpoints

@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma.util.js";
+import axios from 'axios';
 import { fetchFileContent, fetchRepositoryTree } from "../services/github.service.js";
 import { runAIAnalysis, runCodeExplorer, generateRepoDocs, generateV1_5Insights } from "../services/analysis.service.js";
 import { StaticAnalysisService } from "../services/staticAnalysis.service.js";
@@ -468,5 +469,287 @@ export const getLatestOnboarding = async (req, res) => {
     res.json(analysis.onboardingGuide);
   } catch (error) {
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// V2 Dashboard Stats
+// ---------------------------------------------------------------------------
+export const getDashboardStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const repositories = await prisma.repository.findMany({
+      where: { userId },
+      include: {
+        scans: {
+          include: { healthScore: true },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    const allScans = repositories.flatMap(r => r.scans);
+    const completedScans = allScans.filter(s => s.status === 'COMPLETED');
+
+    const totalFilesAnalyzed = completedScans.reduce((sum, s) => sum + (s.analyzedFiles || 0), 0);
+
+    const functionsAgg = await prisma.fileMetrics.aggregate({
+      where: { file: { scan: { repository: { userId } } } },
+      _sum: { functionCount: true, componentCount: true }
+    });
+
+    const allFindings = await prisma.securityFinding.findMany({
+      where: { scan: { repository: { userId } } },
+      select: { severity: true }
+    });
+
+    const securityBySeverity = {
+      CRITICAL: allFindings.filter(f => f.severity.toUpperCase() === 'CRITICAL').length,
+      HIGH: allFindings.filter(f => f.severity.toUpperCase() === 'HIGH').length,
+      MEDIUM: allFindings.filter(f => f.severity.toUpperCase() === 'MEDIUM').length,
+      LOW: allFindings.filter(f => f.severity.toUpperCase() === 'LOW').length,
+    };
+
+    const healthScores = completedScans.map(s => s.healthScore?.overall).filter(v => v != null);
+    const avgHealth = healthScores.length
+      ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length)
+      : null;
+
+    // Largest repo by files
+    const scanStats = completedScans.map(s => ({
+      scanId: s.id,
+      repositoryId: s.repositoryId,
+      repoName: repositories.find(r => r.id === s.repositoryId)?.name || 'Unknown',
+      repoFullName: repositories.find(r => r.id === s.repositoryId)?.fullName || 'Unknown',
+      totalFiles: s.totalFiles || 0,
+      health: s.healthScore?.overall || 0,
+      createdAt: s.createdAt
+    }));
+
+    const largestRepo = [...scanStats].sort((a, b) => b.totalFiles - a.totalFiles)[0] || null;
+    const mostComplexRepo = [...scanStats].sort((a, b) => a.health - b.health)[0] || null;
+
+    const recentScans = await prisma.repositoryScan.findMany({
+      where: { repository: { userId }, status: 'COMPLETED' },
+      include: { repository: true, healthScore: true },
+      orderBy: { createdAt: 'desc' },
+      take: 6
+    });
+
+    // Health score trend (last 10 completed scans ordered by date)
+    const trendScans = await prisma.repositoryScan.findMany({
+      where: { repository: { userId }, status: 'COMPLETED' },
+      include: { healthScore: true, repository: true },
+      orderBy: { createdAt: 'asc' },
+      take: 10
+    });
+
+    res.json({
+      totalRepositories: repositories.length,
+      totalScans: allScans.length,
+      completedScans: completedScans.length,
+      totalFilesAnalyzed,
+      totalFunctions: functionsAgg._sum.functionCount || 0,
+      totalComponents: functionsAgg._sum.componentCount || 0,
+      securityBySeverity,
+      avgHealth,
+      largestRepo,
+      mostComplexRepo,
+      recentScans: recentScans.map(s => ({
+        id: s.id,
+        repository: s.repository,
+        healthScore: s.healthScore,
+        createdAt: s.createdAt,
+        totalFiles: s.totalFiles,
+        analyzedFiles: s.analyzedFiles
+      })),
+      healthTrend: trendScans.map(s => ({
+        date: s.createdAt,
+        overall: s.healthScore?.overall || 0,
+        repoName: s.repository?.name || 'Unknown'
+      }))
+    });
+  } catch (error) {
+    console.error('Dashboard Stats Error:', error);
+    res.status(500).json({ message: 'Failed to fetch dashboard stats' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// V2 Compare Two Scans
+// ---------------------------------------------------------------------------
+export const compareScansByIds = async (req, res) => {
+  try {
+    const { a, b } = req.query;
+    if (!a || !b) return res.status(400).json({ message: 'Provide two scan IDs: ?a=id1&b=id2' });
+
+    const userId = req.user.id;
+
+    const [scanA, scanB] = await Promise.all([
+      prisma.repositoryScan.findFirst({
+        where: { id: a, repository: { userId } },
+        include: { repository: true, healthScore: true, securityFindings: true, architecture: true }
+      }),
+      prisma.repositoryScan.findFirst({
+        where: { id: b, repository: { userId } },
+        include: { repository: true, healthScore: true, securityFindings: true, architecture: true }
+      })
+    ]);
+
+    if (!scanA || !scanB) return res.status(404).json({ message: 'One or both scans not found or access denied' });
+
+    const [metricsA, metricsB] = await Promise.all([
+      prisma.fileMetrics.aggregate({
+        where: { file: { scanId: a } },
+        _sum: { linesOfCode: true, functionCount: true, componentCount: true, dependencyCount: true },
+        _max: { nestingDepth: true, largestFunction: true },
+        _avg: { avgFunctionLength: true }
+      }),
+      prisma.fileMetrics.aggregate({
+        where: { file: { scanId: b } },
+        _sum: { linesOfCode: true, functionCount: true, componentCount: true, dependencyCount: true },
+        _max: { nestingDepth: true, largestFunction: true },
+        _avg: { avgFunctionLength: true }
+      })
+    ]);
+
+    const largeFilesA = await prisma.fileMetrics.count({ where: { file: { scanId: a }, linesOfCode: { gt: 300 } } });
+    const largeFilesB = await prisma.fileMetrics.count({ where: { file: { scanId: b }, linesOfCode: { gt: 300 } } });
+
+    res.json({
+      scanA: { ...scanA, metrics: { ...metricsA._sum, ...metricsA._max, avgFunctionLength: metricsA._avg.avgFunctionLength, largeFilesCount: largeFilesA } },
+      scanB: { ...scanB, metrics: { ...metricsB._sum, ...metricsB._max, avgFunctionLength: metricsB._avg.avgFunctionLength, largeFilesCount: largeFilesB } }
+    });
+  } catch (error) {
+    console.error('Compare Scans Error:', error);
+    res.status(500).json({ message: 'Failed to compare scans' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// V2 AI Assistant (uses cached context, no re-analysis)
+// ---------------------------------------------------------------------------
+export const askAIAssistant = async (req, res) => {
+  try {
+    const { scanId, question } = req.body;
+    if (!scanId || !question?.trim()) return res.status(400).json({ message: 'scanId and question are required' });
+
+    const scan = await prisma.repositoryScan.findFirst({
+      where: { id: scanId, repository: { userId: req.user.id } },
+      include: {
+        repository: true,
+        healthScore: true,
+        architecture: true,
+        onboardingGuide: true,
+        securityFindings: { take: 15, orderBy: { severity: 'asc' } }
+      }
+    });
+
+    if (!scan) return res.status(404).json({ message: 'Scan not found' });
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) return res.status(500).json({ message: 'AI service not configured' });
+
+    const context = `Repository: ${scan.repository.fullName}
+Overall Health: ${scan.healthScore?.overall || 'N/A'}/100
+Maintainability: ${scan.healthScore?.maintainability || 'N/A'}, Security: ${scan.healthScore?.security || 'N/A'}, Architecture: ${scan.healthScore?.architecture || 'N/A'}, Documentation: ${scan.healthScore?.documentation || 'N/A'}
+Total Files: ${scan.totalFiles}, Files Analyzed: ${scan.analyzedFiles}
+Scan Date: ${scan.createdAt}
+
+Repository Summary:
+${scan.summary || 'Not available.'}
+
+Architecture Overview:
+${scan.architecture?.summary || 'Not available.'}
+
+Onboarding Guide:
+${(scan.onboardingGuide?.content || 'Not available.').substring(0, 1500)}
+
+Security Findings (${scan.securityFindings.length}):
+${scan.securityFindings.map(f => `[${f.severity}] ${f.type} in ${f.file}: ${f.description.substring(0, 120)}`).join('\n')}`;
+
+    const prompt = `You are a senior software engineer reviewing a repository analysis. Answer the following question based ONLY on the provided analysis data. Be concise, accurate, and developer-friendly. Do not make up information not present in the context.
+
+Repository Analysis Context:
+${context}
+
+Question: ${question.trim()}
+
+Answer:`;
+
+    const response = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 800
+      },
+      { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
+    );
+
+    res.json({ answer: response.data.choices[0].message.content.trim() });
+  } catch (error) {
+    console.error('AI Assistant Error:', error?.response?.data || error.message);
+    res.status(500).json({ message: 'AI assistant failed to respond' });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// V2 Global Search
+// ---------------------------------------------------------------------------
+export const globalSearch = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) return res.json({ scans: [], findings: [], files: [] });
+
+    const userId = req.user.id;
+    const query = q.trim();
+
+    const [scans, findings, files] = await Promise.all([
+      prisma.repositoryScan.findMany({
+        where: {
+          repository: { userId },
+          OR: [
+            { repository: { name: { contains: query, mode: 'insensitive' } } },
+            { repository: { fullName: { contains: query, mode: 'insensitive' } } },
+            { summary: { contains: query, mode: 'insensitive' } }
+          ]
+        },
+        include: { repository: true, healthScore: true },
+        take: 8,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.securityFinding.findMany({
+        where: {
+          scan: { repository: { userId } },
+          OR: [
+            { type: { contains: query, mode: 'insensitive' } },
+            { description: { contains: query, mode: 'insensitive' } },
+            { file: { contains: query, mode: 'insensitive' } }
+          ]
+        },
+        include: { scan: { include: { repository: true } } },
+        take: 8
+      }),
+      prisma.repositoryFile.findMany({
+        where: {
+          scan: { repository: { userId } },
+          path: { contains: query, mode: 'insensitive' }
+        },
+        include: { scan: { include: { repository: true } }, metrics: true, classification: true },
+        take: 8
+      })
+    ]);
+
+    res.json({
+      scans: scans.map(s => ({ id: s.id, repository: s.repository, healthScore: s.healthScore, createdAt: s.createdAt, status: s.status })),
+      findings: findings.map(f => ({ id: f.id, type: f.type, severity: f.severity, file: f.file, description: f.description, scanId: f.scanId, repository: f.scan?.repository })),
+      files: files.map(f => ({ id: f.id, path: f.path, extension: f.extension, size: f.size, metrics: f.metrics, classification: f.classification, scanId: f.scanId, repository: f.scan?.repository }))
+    });
+  } catch (error) {
+    console.error('Global Search Error:', error);
+    res.status(500).json({ message: 'Search failed' });
   }
 };

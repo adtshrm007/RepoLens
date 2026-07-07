@@ -23,6 +23,7 @@ export class ScannerService {
       data: {
         repositoryId: this.repositoryId,
         status: 'SCANNING',
+        startedAt: new Date(),
       }
     });
 
@@ -199,6 +200,7 @@ export class ScannerService {
       where: { id: scanId },
       data: { 
         status: 'COMPLETED',
+        completedAt: new Date(),
         summary: aiInsights.summary || "Scan completed successfully."
       }
     });
