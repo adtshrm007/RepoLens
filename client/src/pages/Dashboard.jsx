@@ -4,39 +4,116 @@ import DashboardLayout from "../Components/common/DashboardLayout.jsx";
 import ManualAnalysisModal from "../Components/analysis/ManualAnalysisModal.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../services/api.js";
+import SparkLine from "../Components/ui/SparkLine.jsx";
+import { SeverityDonut, SeverityBars } from "../Components/ui/SeverityChart.jsx";
+import { SkeletonStats, SkeletonTable, SkeletonCard } from "../Components/ui/Skeleton.jsx";
+
+// ─── Sub-components ────────────────────────────────────────────────────────
+
+function StatBlock({ label, value, sub, icon, accent = "rgba(255,255,255,0.8)", loading }) {
+  return (
+    <div className="p-4 relative overflow-hidden group"
+      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: "8px" }}>
+        {label}
+      </div>
+      {loading ? (
+        <div className="skeleton" style={{ width: "60%", height: "24px", marginBottom: "6px" }} />
+      ) : (
+        <div style={{ fontFamily: "monospace", fontSize: "22px", fontWeight: "800", color: accent, lineHeight: 1, marginBottom: "4px" }}>
+          {value}
+        </div>
+      )}
+      {sub && !loading && (
+        <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {sub}
+        </div>
+      )}
+      {/* Subtle icon watermark */}
+      <div className="absolute right-3 bottom-3 opacity-[0.04] text-white text-4xl select-none pointer-events-none">
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+function ScorePill({ score }) {
+  const color = score >= 80 ? "#22c55e" : score >= 60 ? "#eab308" : "#ef4444";
+  const label = score >= 80 ? "HEALTHY" : score >= 60 ? "FAIR" : "AT RISK";
+  return (
+    <span style={{
+      fontFamily: "monospace", fontSize: "8px", fontWeight: "bold",
+      color, border: `1px solid ${color}44`, background: `${color}0f`,
+      padding: "2px 6px", textTransform: "uppercase", letterSpacing: "0.12em"
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function ScoreDelta({ current, previous }) {
+  if (previous == null || current == null) return null;
+  const delta = current - previous;
+  if (delta === 0) return <span style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>—</span>;
+  const up = delta > 0;
+  return (
+    <span style={{ fontFamily: "monospace", fontSize: "9px", fontWeight: "bold", color: up ? "#22c55e" : "#ef4444" }}>
+      {up ? "↑" : "↓"}{Math.abs(delta)}
+    </span>
+  );
+}
+
+// ─── Main Dashboard ─────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ repos: 0, analyses: 0, findings: 0, score: null });
-  const [recent, setRecent] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [reposRes, historyRes] = await Promise.all([
-          api.get("/repos").catch(() => ({ data: [] })),
-          api.get("/analysis/history").catch(() => ({ data: [] })),
-        ]);
-
-        // /repos returns GitHub live repos (array) — use length for count
-        const repos = Array.isArray(reposRes.data) ? reposRes.data : (reposRes.data?.repos || []);
-        // /analysis/history returns a plain array
-        const analyses = Array.isArray(historyRes.data)
-          ? historyRes.data
-          : (historyRes.data?.analyses || []);
-
-        const totalFindings = analyses.reduce((sum, a) => sum + (a.findings?.length || 0), 0);
-        const validScores = analyses.filter((a) => a.overallScore != null);
-        const score = validScores.length
-          ? Math.round(validScores.reduce((sum, a) => sum + a.overallScore, 0) / validScores.length)
-          : null;
-
-        setStats({ repos: repos.length, analyses: analyses.length, findings: totalFindings, score });
-        setRecent(analyses.slice(0, 5));
+        const { data } = await api.get("/analysis/dashboard-stats");
+        setStats(data);
       } catch (err) {
-        console.error("Dashboard fetch error:", err);
+        // Fallback to old endpoint if new one isn't deployed yet
+        try {
+          const [reposRes, historyRes] = await Promise.all([
+            api.get("/repos").catch(() => ({ data: [] })),
+            api.get("/analysis/history").catch(() => ({ data: [] })),
+          ]);
+          const repos = Array.isArray(reposRes.data) ? reposRes.data : [];
+          const analyses = Array.isArray(historyRes.data) ? historyRes.data : [];
+          const totalFindings = analyses.reduce((s, a) => s + (a.findings?.length || 0), 0);
+          const validScores = analyses.filter(a => a.healthScore?.overall != null);
+          const avgHealth = validScores.length
+            ? Math.round(validScores.reduce((s, a) => s + a.healthScore.overall, 0) / validScores.length)
+            : null;
+          const securityBySeverity = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+          analyses.forEach(a => (a.findings || []).forEach(f => {
+            const sev = f.severity?.toUpperCase();
+            if (sev && securityBySeverity[sev] !== undefined) securityBySeverity[sev]++;
+          }));
+          setStats({
+            totalRepositories: repos.length,
+            totalScans: analyses.length,
+            completedScans: analyses.filter(a => a.status === "COMPLETED").length,
+            totalFilesAnalyzed: 0,
+            totalFunctions: 0,
+            totalComponents: 0,
+            securityBySeverity,
+            avgHealth,
+            largestRepo: null,
+            mostComplexRepo: null,
+            recentScans: analyses.slice(0, 6).map(a => ({
+              id: a.id, repository: a.repository, healthScore: a.healthScore, createdAt: a.createdAt, totalFiles: 0
+            })),
+            healthTrend: validScores.slice(-10).map(a => ({ date: a.createdAt, overall: a.healthScore.overall, repoName: a.repository?.name || "" }))
+          });
+        } catch (e) {
+          console.error("Dashboard fallback error:", e);
+        }
       } finally {
         setLoading(false);
       }
@@ -44,281 +121,267 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
-  const statCards = [
-    {
-      label: "Repositories",
-      value: loading ? "—" : stats.repos,
-      sub: stats.repos === 1 ? "repository connected" : "repositories connected",
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="white" viewBox="0 0 24 24">
-          <path strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-        </svg>
-      ),
-    },
-    {
-      label: "Analyses Run",
-      value: loading ? "—" : stats.analyses,
-      sub: "total scans completed",
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="white" viewBox="0 0 24 24">
-          <path strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-    },
-    {
-      label: "Issues Found",
-      value: loading ? "—" : stats.findings,
-      sub: "across all analyses",
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="white" viewBox="0 0 24 24">
-          <path strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-      ),
-    },
-    {
-      label: "Avg. Health Score",
-      value: loading ? "—" : stats.score !== null ? `${stats.score}%` : "N/A",
-      sub: stats.score !== null ? (stats.score >= 80 ? "Good shape" : stats.score >= 60 ? "Needs attention" : "Requires review") : "run an analysis to see",
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="white" viewBox="0 0 24 24">
-          <path strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-        </svg>
-      ),
-    },
-  ];
+  const totalFindings = stats ? Object.values(stats.securityBySeverity || {}).reduce((s, v) => s + v, 0) : 0;
+  const trendValues = (stats?.healthTrend || []).map(t => t.overall);
 
   return (
     <>
       <DashboardLayout>
-        <div className="space-y-4 animate-fade-up">
+        <div className="space-y-4 page-enter">
 
-        {/* Header */}
-        <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }} className="px-5 py-4">
-          <h1 className="text-white font-mono text-[13px] tracking-wide mb-0.5">
-            Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="text-white/40 font-mono text-[11px] leading-relaxed">
-            Here's an overview of your repository intelligence.
-          </p>
-        </div>
-
-        {/* GitHub Connection Banner */}
-        {!user?.githubId && (
-          <div className="p-4 flex items-center justify-between" style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.2)" }}>
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          {/* ── Header ── */}
+          <div style={{ padding: "14px 18px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div>
-                <h3 className="text-white font-mono text-xs font-bold">Connect to GitHub to get repo analysis</h3>
-                <p className="text-white/50 font-mono text-[10px] mt-0.5">You can still run manual analyses by uploading files or pasting code.</p>
-              </div>
-            </div>
-            <a 
-              href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/auth/github`}
-              className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/30 font-mono text-[10px] font-bold uppercase tracking-widest transition-colors"
-            >
-              Connect GitHub
-            </a>
-          </div>
-        )}
-
-        {/* Stats */}
-        <div style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.01)" }}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.06]">
-            {statCards.map((s) => (
-              <div key={s.label} className="p-4 relative">
-                <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-mono mb-2">{s.label}</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-white text-lg font-mono font-bold">{s.value}</span>
+                <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>
+                  REPOLENS V2 // INTELLIGENCE DASHBOARD
                 </div>
-                <p className="text-white/25 text-[9px] font-mono mt-0.5">{s.sub}</p>
-                <div className="absolute right-3 top-3 opacity-[0.07]">{s.icon}</div>
-                <div className="mt-3 w-12 h-[1px] bg-white/15" />
+                <h1 style={{ fontFamily: "monospace", fontSize: "15px", fontWeight: "800", color: "#fff", letterSpacing: "0.03em", margin: 0 }}>
+                  {user?.name ? `${user.name.split(" ")[0]}'s` : "Your"} Repository Intelligence
+                </h1>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-          {/* Recent Analyses */}
-          <div className="col-span-2 p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-mono text-[11px]">Recent Analyses</h2>
-              <Link
-                to="/analysis"
-                className="text-white/40 font-mono text-[9px] tracking-[0.15em] uppercase hover:text-white transition-colors"
-              >
-                View All →
-              </Link>
-            </div>
-
-            {loading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-8 bg-white/[0.03] animate-pulse" />
-                ))}
-              </div>
-            ) : recent.length > 0 ? (
-              <div className="overflow-x-auto pb-2">
-                <table className="w-full text-left data-table border-collapse min-w-[500px]">
-                  <thead>
-                  <tr>
-                    <th>Repository</th>
-                    <th>Status</th>
-                    <th>Issues</th>
-                    <th>Date</th>
-                    <th className="text-right">Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((a) => (
-                    <tr key={a.id} className="group">
-                      <td className="flex items-center gap-2">
-                        <span className="text-white/20 text-[10px]">&lt;&gt;</span>
-                        <Link
-                          to={`/scan/${a.id}`}
-                          className="text-white/80 group-hover:text-white transition-colors hover:underline"
-                        >
-                          {a.repository?.name || "Unknown"}
-                        </Link>
-                      </td>
-                      <td>
-                        <span
-                          style={{
-                            border: `1px solid ${a.status?.toLowerCase() === 'completed' ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.12)'}`,
-                            background: a.status?.toLowerCase() === 'completed' ? 'rgba(34,197,94,0.07)' : 'rgba(255,255,255,0.03)'
-                          }}
-                          className={`text-[8px] px-1.5 py-0.5 uppercase tracking-widest ${
-                            a.status?.toLowerCase() === 'completed' ? 'text-green-400/70' : 'text-white/50'
-                          }`}
-                        >
-                          {a.status || 'Complete'}
-                        </span>
-                      </td>
-                      <td>{a.findings?.length || 0}</td>
-                      <td className="text-white/30 text-[9px]">
-                        {a.createdAt
-                          ? new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                          : '—'}
-                      </td>
-                      <td className="text-right">
-                        <span
-                          className={`font-bold font-mono text-sm ${
-                            a.overallScore >= 80 ? 'text-green-400' :
-                            a.overallScore >= 60 ? 'text-yellow-400' : 'text-red-400'
-                          }`}
-                        >
-                          {a.overallScore != null ? Math.round(a.overallScore) : '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <svg className="w-8 h-8 text-white/10 mb-3" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-white/30 font-mono text-[11px] mb-3">No analyses yet</p>
-                <Link
-                  to="/repositories"
-                  className="text-[10px] font-mono uppercase tracking-widest px-4 py-2 hover:text-white transition-colors"
-                  style={{ border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)" }}
-                >
-                  Browse Repositories →
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="space-y-4">
-            <div className="p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <h2 className="text-white font-mono text-[11px] mb-4 flex items-center gap-2">
-                <svg className="w-3 h-3 text-white/40 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
-                Quick Actions
-              </h2>
-              <div className="space-y-2">
+              <div style={{ display: "flex", gap: "8px" }}>
                 <button
                   onClick={() => setIsModalOpen(true)}
-                  className="w-full text-left flex items-center gap-3 p-3 group transition-colors cursor-pointer"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                  style={{ fontFamily: "monospace", fontSize: "10px", fontWeight: "bold", color: "#fff", background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.35)", padding: "8px 16px", cursor: "pointer", letterSpacing: "0.1em", textTransform: "uppercase", transition: "all 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.25)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(139,92,246,0.15)"}
                 >
-                  <span className="text-base">📝</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-mono text-white/80 group-hover:text-white transition-colors">Manual Analysis</p>
-                    <p className="text-[9px] font-mono text-white/30">Upload file or paste code</p>
-                  </div>
-                  <span className="text-white/20 group-hover:text-white/60 transition-colors text-xs">→</span>
+                  + Manual Analysis
                 </button>
-
-                {[
-                  { label: "Browse Repositories", sub: "Select files to analyse", to: "/repositories", icon: "📁" },
-                  { label: "View Analysis History", sub: "See past findings", to: "/analysis", icon: "🕐" },
-                ].map((action) => (
-                  <Link
-                    key={action.to}
-                    to={action.to}
-                    className="flex items-center gap-3 p-3 group transition-colors"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", textDecoration: "none" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                  >
-                    <span className="text-base">{action.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-mono text-white/80 group-hover:text-white transition-colors">{action.label}</p>
-                      <p className="text-[9px] font-mono text-white/30">{action.sub}</p>
-                    </div>
-                    <span className="text-white/20 group-hover:text-white/60 transition-colors text-xs">→</span>
-                  </Link>
-                ))}
+                <Link to="/repositories"
+                  style={{ fontFamily: "monospace", fontSize: "10px", fontWeight: "bold", color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", padding: "8px 16px", textDecoration: "none", letterSpacing: "0.1em", textTransform: "uppercase", transition: "all 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                >
+                  Browse Repos
+                </Link>
               </div>
             </div>
+          </div>
 
-            {/* Getting Started — always visible */}
-            <div className="p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <h2 className="text-white/40 font-mono text-[10px] uppercase tracking-widest mb-3">Getting Started</h2>
-              <ol className="space-y-2.5">
-                {[
-                  { step: "Go to Repositories", to: "/repositories" },
-                  { step: "Open a repo & select files", to: "/repositories" },
-                  { step: "Click Run Analysis", to: null },
-                  { step: "Review findings here", to: "/analysis" },
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2.5">
-                    <span
-                      className="w-4 h-4 shrink-0 flex items-center justify-center font-mono text-[8px] font-bold"
-                      style={{ border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.5)" }}
-                    >
-                      {i + 1}
-                    </span>
-                    {item.to ? (
-                      <Link
-                        to={item.to}
-                        className="text-[10px] font-mono text-white/50 hover:text-white/80 transition-colors hover:underline"
-                      >
-                        {item.step}
-                      </Link>
-                    ) : (
-                      <span className="text-[10px] font-mono text-white/50">{item.step}</span>
-                    )}
-                  </li>
-                ))}
-              </ol>
+          {/* ── GitHub Banner ── */}
+          {!user?.githubId && (
+            <div style={{ padding: "12px 18px", background: "rgba(234,179,8,0.06)", border: "1px solid rgba(234,179,8,0.2)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ color: "#eab308", fontSize: "14px" }}>⚠</span>
+                <div>
+                  <div style={{ fontFamily: "monospace", fontSize: "11px", color: "#fff", fontWeight: "bold" }}>Connect GitHub to scan repositories</div>
+                  <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.4)" }}>You can still run manual analyses below</div>
+                </div>
+              </div>
+              <a href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/auth/github`}
+                style={{ fontFamily: "monospace", fontSize: "9px", fontWeight: "bold", color: "#eab308", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", padding: "7px 14px", textDecoration: "none", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                CONNECT GITHUB →
+              </a>
+            </div>
+          )}
+
+          {/* ── Stats Grid (8 metrics) ── */}
+          {loading ? (
+            <SkeletonStats count={4} />
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "rgba(255,255,255,0.04)" }}>
+                <StatBlock label="Repositories" value={stats?.totalRepositories ?? 0} sub="connected" icon="📁" />
+                <StatBlock label="Total Scans" value={stats?.totalScans ?? 0} sub={`${stats?.completedScans ?? 0} completed`} icon="⚡" />
+                <StatBlock label="Files Analyzed" value={(stats?.totalFilesAnalyzed ?? 0).toLocaleString()} sub="across all scans" icon="📄" />
+                <StatBlock label="Functions Found" value={(stats?.totalFunctions ?? 0).toLocaleString()} sub={`${stats?.totalComponents ?? 0} components`} icon="ƒ" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "rgba(255,255,255,0.04)" }}>
+                <StatBlock label="Avg. Health" value={stats?.avgHealth != null ? `${stats.avgHealth}` : "N/A"}
+                  sub={stats?.avgHealth >= 80 ? "Good shape" : stats?.avgHealth >= 60 ? "Needs attention" : "Review required"}
+                  accent={stats?.avgHealth >= 80 ? "#22c55e" : stats?.avgHealth >= 60 ? "#eab308" : "#ef4444"} icon="♥" />
+                <StatBlock label="Security Issues" value={totalFindings}
+                  sub={`${stats?.securityBySeverity?.CRITICAL ?? 0} critical, ${stats?.securityBySeverity?.HIGH ?? 0} high`}
+                  accent={totalFindings === 0 ? "#22c55e" : stats?.securityBySeverity?.CRITICAL > 0 ? "#ef4444" : "#eab308"} icon="🔒" />
+                <StatBlock label="Largest Repo"
+                  value={stats?.largestRepo?.repoName ?? "N/A"}
+                  sub={stats?.largestRepo ? `${stats.largestRepo.totalFiles} files` : "no data"} icon="🏗" />
+                <StatBlock label="Most Complex"
+                  value={stats?.mostComplexRepo?.repoName ?? "N/A"}
+                  sub={stats?.mostComplexRepo ? `health ${stats.mostComplexRepo.health}` : "no data"}
+                  accent={stats?.mostComplexRepo?.health < 60 ? "#ef4444" : "#eab308"} icon="⚙" />
+              </div>
+            </>
+          )}
+
+          {/* ── Main Content Grid ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 320px", gap: "12px" }}>
+
+            {/* ── Recent Scans Table ── */}
+            <div style={{ gridColumn: "1 / 3", padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.18em", margin: 0 }}>
+                  Recently Scanned
+                </h2>
+                <Link to="/analysis" style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.15em", textDecoration: "none" }}>
+                  View All →
+                </Link>
+              </div>
+
+              {loading ? <SkeletonTable rows={5} /> : (stats?.recentScans?.length > 0 ? (
+                <table className="data-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left" }}>Repository</th>
+                      <th style={{ textAlign: "left" }}>Files</th>
+                      <th style={{ textAlign: "left" }}>Date</th>
+                      <th style={{ textAlign: "right" }}>Health</th>
+                      <th style={{ textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.recentScans.map((scan) => {
+                      const score = scan.healthScore?.overall;
+                      const scoreColor = score >= 80 ? "#22c55e" : score >= 60 ? "#eab308" : "#ef4444";
+                      return (
+                        <tr key={scan.id}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ color: "rgba(255,255,255,0.15)", fontSize: "10px" }}>&lt;/&gt;</span>
+                              <Link to={`/repositories/${scan.repository?.fullName || ''}`}
+                                style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.8)", textDecoration: "none", fontWeight: "bold" }}>
+                                {scan.repository?.name || "Unknown"}
+                              </Link>
+                            </div>
+                            <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.25)", marginTop: "2px", paddingLeft: "24px" }}>
+                              {scan.repository?.fullName}
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.5)" }}>
+                              {scan.analyzedFiles ?? scan.totalFiles ?? 0}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>
+                              {scan.createdAt ? new Date(scan.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }) : "—"}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {score != null ? (
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" }}>
+                                <ScorePill score={score} />
+                                <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "800", color: scoreColor }}>{score}</span>
+                              </div>
+                            ) : <span style={{ color: "rgba(255,255,255,0.2)" }}>—</span>}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <Link to={`/scan/${scan.id}`}
+                              style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(139,92,246,0.8)", textDecoration: "none", letterSpacing: "0.1em" }}>
+                              VIEW →
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: "40px 0", textAlign: "center" }}>
+                  <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.15 }}>📊</div>
+                  <p style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.25)", marginBottom: "16px" }}>No scans yet</p>
+                  <Link to="/repositories"
+                    style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.5)", textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", padding: "8px 16px", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                    Browse Repositories →
+                  </Link>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Right Column ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+              {/* Security Overview */}
+              <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.18em", margin: "0 0 14px" }}>
+                  Security Overview
+                </h2>
+                {loading ? <SkeletonCard lines={4} /> : (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+                    <SeverityDonut data={stats?.securityBySeverity || { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }} size={72} />
+                    <div style={{ flex: 1 }}>
+                      <SeverityBars data={stats?.securityBySeverity || { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }} />
+                    </div>
+                  </div>
+                )}
+                {!loading && totalFindings > 0 && (
+                  <Link to="/analysis"
+                    style={{ display: "block", marginTop: "12px", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", textDecoration: "none", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                    Review findings →
+                  </Link>
+                )}
+              </div>
+
+              {/* Health Trend */}
+              <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.18em", margin: "0 0 14px" }}>
+                  Health Trend
+                </h2>
+                {loading ? <SkeletonCard lines={1} /> : trendValues.length > 1 ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "20px", fontWeight: "800", color: trendValues[trendValues.length - 1] >= 80 ? "#22c55e" : trendValues[trendValues.length - 1] >= 60 ? "#eab308" : "#ef4444" }}>
+                        {trendValues[trendValues.length - 1]}
+                      </span>
+                      <ScoreDelta current={trendValues[trendValues.length - 1]} previous={trendValues[trendValues.length - 2]} />
+                    </div>
+                    <SparkLine
+                      data={trendValues}
+                      width={260}
+                      height={48}
+                      color={trendValues[trendValues.length - 1] >= 80 ? "#22c55e" : trendValues[trendValues.length - 1] >= 60 ? "#eab308" : "#ef4444"}
+                      showDots
+                    />
+                    <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.2)", marginTop: "6px" }}>
+                      Last {trendValues.length} scans
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.2)", textAlign: "center", padding: "20px 0" }}>
+                    Run 2+ scans to see trends
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.18em", margin: "0 0 12px" }}>
+                  Quick Actions
+                </h2>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {[
+                    { label: "Manual Analysis", sub: "Paste code or upload a file", to: null, onClick: () => setIsModalOpen(true), icon: "📝" },
+                    { label: "Browse Repositories", sub: "Scan a GitHub repo", to: "/repositories", icon: "📁" },
+                    { label: "Analysis History", sub: "View all past scans", to: "/analysis", icon: "🕐" },
+                    { label: "Compare Scans", sub: "Side-by-side diff", to: "/compare", icon: "⚖" },
+                  ].map((a, i) => {
+                    const inner = (
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", width: "100%", textAlign: "left", transition: "background 0.15s" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
+                        <span style={{ fontSize: "14px", flexShrink: 0 }}>{a.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.8)", fontWeight: "bold" }}>{a.label}</div>
+                          <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>{a.sub}</div>
+                        </div>
+                        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "10px" }}>→</span>
+                      </div>
+                    );
+                    if (a.onClick) return <button key={i} onClick={a.onClick} style={{ background: "none", border: "none", padding: 0, width: "100%" }}>{inner}</button>;
+                    return <Link key={i} to={a.to} style={{ textDecoration: "none" }}>{inner}</Link>;
+                  })}
+                </div>
+              </div>
             </div>
           </div>
+
         </div>
-      </div>
-    </DashboardLayout>
+      </DashboardLayout>
       <ManualAnalysisModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </>
   );
