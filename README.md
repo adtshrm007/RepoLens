@@ -20,7 +20,7 @@
 ## 📖 Table of Contents
 
 - [🌐 Overview](#-overview)
-- [✨ Features](#-features)
+- [✨ What's New in V2](#-whats-new-in-v2)
 - [🛠 Tech Stack](#-tech-stack)
 - [🏗 Architecture](#-architecture)
 - [📁 Project Structure](#-project-structure)
@@ -29,57 +29,51 @@
 - [🔐 Authentication](#-authentication)
 - [🚀 Getting Started](#-getting-started)
 - [🔑 Environment Variables](#-environment-variables)
-- [🗺 Frontend Routes](#-frontend-routes)
-- [🧠 AI Analysis Pipeline](#-ai-analysis-pipeline)
-- [🛡 Security Model](#-security-model)
 
 ---
 
 ## 🌐 Overview
 
-> **RepoLens V1.5** is a full-stack AI code analysis platform designed as a complete **Repository Intelligence Engine**. 
+> **RepoLens V2** is a full-stack AI code analysis platform designed as a complete **Repository Intelligence Engine**. 
 
-It connects directly to your GitHub account, scans your entire repository tree, and runs a comprehensive pipeline of static analysis, dependency mapping, and AI-powered intelligence. It surfaces structural insights, security vulnerabilities, complexity metrics, and automatically generates onboarding guides and architecture documentation—all from a clean, terminal-aesthetic dark UI.
+It connects directly to your GitHub account, scans your entire repository tree, and runs a comprehensive pipeline of static analysis, dependency mapping, and AI-powered intelligence. It surfaces structural insights, security vulnerabilities, complexity metrics, and automatically generates onboarding guides and architecture documentation—all from a clean, premium dark UI.
 
-> ⚠️ **Note on Language Support:** Currently, the deterministic static analysis and dependency graphing engines are heavily optimized for **JavaScript and TypeScript (JS/TS)**. Support for Python, Go, Rust, Java, and other languages is actively in development!
+> ⚠️ **Note on Language Support:** Currently, the deterministic static analysis and dependency graphing engines are heavily optimized for **JavaScript and TypeScript (JS/TS)**.
 
 ### Supported Workflows:
 
 | Workflow | Description |
 |:---|:---|
 | 🔍 **Repository Intelligence Scan** | Scans an entire GitHub repo recursively. Builds a dependency graph (DAG), calculates complexity metrics (dead code, large files), flags security vulnerabilities, and uses AI to generate an architecture summary. |
-| 🔬 **Code Explorer** | Pick a single file (from a repo or manual upload) and get a deep line-by-line breakdown — notable lines, security flags, and structured improvement suggestions. |
-| 📚 **Docs Generator** | Synthesize file-level purpose and architecture summaries into a cohesive technical documentation markdown document. |
+| ⚖️ **Side-by-Side Comparison** | Compare two historical repository scans to track metric regressions, security vulnerability resolutions, and architecture drift. |
+| 🤖 **AI Repository Assistant** | Chat interactively with the OpenRouter LLM using the cached context of your repository scan to explain architecture or debug security findings. |
 
 ---
 
-## ✨ Features
+## ✨ What's New in V2
 
-### 🚀 Repository Intelligence Engine (V1.5)
-- **Full Repository Scanning** — Recursively fetches the entire repository tree instead of relying on manual file selection.
-- **Dependency Graph (DAG)** — Parses ES6 imports/requires to visually map the architecture of the codebase using `dagre` and `ReactFlow`.
-- **Complexity Metrics** — Calculates deterministic metrics across the repo: Dead code indicators, large file counts (>300 lines), component/hook usage, and maximum nesting depths.
-- **Security Vulnerability Scanner** — Analyzes the codebase for critical/high/medium/low severity vulnerabilities and provides specific **Recommendations** on how to fix them.
-- **AI-Powered Architecture & Onboarding** — Leverages the full repo context to generate accurate architectural summaries and step-by-step onboarding guides.
-- **4-Pillar Health Score** — Grades the repository on Overall Health, Maintainability, Security, and Architecture (0–100).
+### 🚀 Massive UI & UX Upgrade
+- **Dark Terminal Aesthetic** — A completely redesigned interface featuring rich `#050508` dark mode, glassmorphism panels, interactive micro-animations, and custom scrollbars.
+- **Universal Command Palette (⌘K)** — Instantly search across repositories, historical scans, security findings, and files.
+- **Keyboard Shortcuts** — Rapidly navigate the app using sequential shortcuts (e.g., `G` then `D` for Dashboard).
+- **Toast Notifications** — Animated, globally accessible toast alerts for seamless user feedback.
+- **Skeleton Loading States** — Smooth shimmer placeholders to prevent UI layout shifts during heavy data fetching.
 
-### 🔍 Code Explorer
-- **Line-by-line Analysis** — Highlights only notable lines (max 60).
-- **Multi-sentence Explanations** — Mechanical meaning + broader context + edge cases.
-- **Improvement Cards** — `what` the problem is + `howToFix` with a code example + `codeQuote`.
-- **Security Report** — Overall risk level + per-vulnerability analysis.
-- **Purpose & Architecture** — Deep description of the file's role and design patterns.
+### 📊 Explainable Health Metrics
+- **Transparent Scoring** — The overall health score is now visually broken down into its four pillars: Maintainability (35%), Security (35%), Architecture (20%), and Documentation (10%).
+- **Deduction Insights** — See exactly *why* a score is low (e.g., "Critical Vulnerability: -15pts", "Deep Nesting: -5pts").
 
-### 🔐 Authentication
-- **Email + Password** — bcrypt hashing, tight validation logic.
-- **Google OAuth** — ID token verification via `google-auth-library`.
-- **GitHub OAuth** — Full OAuth 2.0 flow for deep repository access.
-- **JWT Session** — Dual-token system (access + refresh) stored as `httpOnly` cookies.
+### 🕸️ Interactive Dependency Graph
+- Enhanced ReactFlow graph that maps how files and modules import each other.
+- Features **Search**, **Focus Mode** (dimming unconnected nodes), and **Hide External** filters.
+- **Export capabilities**: Download the graph as an SVG or high-resolution PNG.
 
-### 🎨 UI & UX
-- Dark terminal-aesthetic design with clean monospace fonts.
-- GSAP animations on the landing page for fluid transitions.
-- Real-time file browser for navigating GitHub repos.
+### 🛡️ Security Posture Panel
+- Grouped vulnerability analysis featuring animated Severity Donut and Bar charts.
+- Quickly filter between CRITICAL, HIGH, MEDIUM, and LOW severity risks mapped to specific lines of code.
+
+### 📥 Exportable Reports
+- Generate and download deep-scan intelligence reports in **Markdown** (.md), **Raw JSON**, or print-optimized **PDFs**.
 
 ---
 
@@ -103,9 +97,9 @@ It connects directly to your GitHub account, scans your entire repository tree, 
 |:---|:---|
 | **React 19** | Core UI component library |
 | **Vite 8** | Next-generation build tool and dev server |
-| **TailwindCSS 4** | Utility-first, high-performance styling |
+| **TailwindCSS 4** | Utility-first styling (supplemented with rich vanilla CSS) |
 | **React Router DOM 7** | Client-side routing and navigation |
-| **GSAP 3** | Advanced animation library |
+| **ReactFlow** | Dependency graph rendering |
 
 ---
 
@@ -115,7 +109,7 @@ It connects directly to your GitHub account, scans your entire repository tree, 
 graph TD
     subgraph Client [React 19 + Vite]
         A[AuthProvider] --> B[ProtectedRoute]
-        B --> C[Pages: Dashboard, CodeExplorer, etc.]
+        B --> C[Pages: Dashboard, Compare, Search]
         C --> D[api.js Axios Interceptor]
     end
 
@@ -134,7 +128,7 @@ graph TD
     end
     
     subgraph AI [OpenRouter]
-        M[GPT-4o Mini API]
+        M[GPT-4o / Claude API]
     end
 
     D -- HTTP/Cookies --> E
@@ -151,18 +145,19 @@ RepoLens/
 ├── client/                          # React frontend (Vite)
 │   ├── src/
 │   │   ├── App.jsx                  # Root router
-│   │   ├── context/AuthContext.jsx  # Global auth state
+│   │   ├── Components/              # UI components, layout, common elements
+│   │   ├── context/                 # AuthContext, ToastContext
+│   │   ├── pages/                   # Dashboards, Code Explorer, Settings
 │   │   ├── services/api.js          # Axios interceptors
-│   │   ├── pages/                   # Home, Dashboard, Explorer pages
-│   │   └── ...
+│   │   └── index.css                # Global V2 design tokens and animations
 │
-└── server/                          # Express backend (Node.js ESM)
+└── server/                          # Express backend (Node.js)
     ├── prisma/                      # Database schema & migrations
     ├── src/
     │   ├── routes/                  # API route definitions
     │   ├── controllers/             # Business logic handlers
     │   ├── middleware/              # JWT and Google Token verifiers
-    │   ├── services/                # Heavy AI and GitHub processing
+    │   ├── services/                # Heavy AI, AST logic, and GitHub processing
     │   └── utils/                   # Helpers (Prisma singleton, Auth logic)
     └── server.js                    # Server entry point
 ```
@@ -175,12 +170,11 @@ RepoLens utilizes a highly normalized PostgreSQL schema mapped through Prisma.
 
 - **`User`**: Tracks authentication details (Google/GitHub IDs, hashed passwords).
 - **`Repository`**: Stores linked GitHub repositories.
-- **`RepositoryScan`**: Tracks the asynchronous background scan status (`SCANNING`, `COMPLETED`).
-- **`RepositoryFile` & `FileMetrics`**: Stores the AST-parsed metrics (Lines of Code, Depth) per file.
+- **`RepositoryScan`**: Tracks the asynchronous background scan status and timestamps (`startedAt`, `completedAt`).
+- **`RepositoryFile` & `FileMetrics`**: Stores AST-parsed metrics (Lines of Code, Depth) per file.
 - **`SecurityFinding`**: Tracks discovered vulnerabilities (XSS, Hardcoded Secrets).
 - **`DependencyGraph`**: Stores the serialized Node/Edge JSON graph.
-- **`HealthScore`**: Stores the calculated 0-100 scores.
-- **`FileDocumentation`**: Caches AI-generated explanations to save LLM costs.
+- **`HealthScore`**: Stores the calculated 0-100 scores for overall health, security, and maintainability.
 
 ---
 
@@ -189,19 +183,17 @@ RepoLens utilizes a highly normalized PostgreSQL schema mapped through Prisma.
 All routes are prefixed with the base URL (default: `http://localhost:3000`).
 
 ### 🔐 Auth (`/auth`)
-- `POST /auth/register` (Public) - Register with email/password.
-- `POST /auth/login` (Public) - Login with email/password.
-- `GET /auth/github/callback` (Public) - Handles the OAuth redirect.
-- `GET /auth/me` (Protected) - Get current user profile.
+- `POST /auth/register` - Register with email/password.
+- `POST /auth/login` - Login with email/password.
+- `GET /auth/github/callback` - Handles the OAuth redirect.
 
-### 🗂 Repositories (`/repos`)
-- `GET /repos` (Protected) - Fetch all connected repos.
-- `GET /repos/:owner/:repo/files` (Protected) - Get the GitHub file tree.
-
-### 🔬 Scans (`/scan`)
-- `POST /scan/start` (Protected) - Triggers a V1.5 background scan.
-- `GET /scan/:id/status` (Protected) - Polls the current running state.
-- `GET /scan/:id` (Protected) - Returns the final, massive JSON payload for the dashboard.
+### 🔬 Scans (`/analysis`)
+- `POST /analysis/run` - Triggers a V2 background scan.
+- `GET /analysis/dashboard-stats` - Aggregated metrics for the home dashboard.
+- `GET /analysis/search` - Global text search across repos, files, and findings.
+- `GET /analysis/compare` - Compare two scan IDs side-by-side.
+- `POST /analysis/ask` - Chat with the AI assistant based on scan context.
+- `GET /analysis/:id` - Returns the massive JSON payload for the V15Dashboard.
 
 ---
 
@@ -213,7 +205,6 @@ RepoLens uses a **dual-token JWT** system delivered securely via `httpOnly` cook
 1. **`httpOnly` cookies**: Prevents malicious JavaScript (XSS) from reading the tokens.
 2. **`sameSite: lax`**: Mitigates Cross-Site Request Forgery (CSRF).
 3. **Silent Refresh**: The frontend automatically intercepts `401 Unauthorized` responses, calls `/auth/refresh`, and replays the failed request seamlessly.
-4. **GitHub Token Reconnect**: If a user revokes GitHub access, the backend returns a specific `403 GITHUB_TOKEN_EXPIRED`, prompting the UI to show a "Reconnect" button.
 
 ---
 
@@ -223,7 +214,6 @@ RepoLens uses a **dual-token JWT** system delivered securely via `httpOnly` cook
 - **Node.js** 18+
 - **PostgreSQL** database
 - **GitHub OAuth App**
-- **Google OAuth Client**
 - **OpenRouter API Key**
 
 ### 1. Clone & Install
@@ -253,7 +243,7 @@ OPENROUTER_API_KEY=your_key
 **Server:**
 ```bash
 cd server
-npx prisma migrate dev
+npx prisma db push
 npm run dev
 ```
 
