@@ -1,9 +1,56 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar.jsx";
 import DashboardNavbar from "./DashboardNavbar.jsx";
+import GlobalSearch from "../ui/GlobalSearch.jsx";
 
 export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const navigate = useNavigate();
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    let keySeq = [];
+    let timeout;
+    
+    const handleKeyDown = (e) => {
+      // Cmd+K / Ctrl+K for Search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+
+      // Avoid triggering navigation if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Sequential shortcuts (G D, G R, G A)
+      keySeq.push(e.key.toLowerCase());
+      if (timeout) clearTimeout(timeout);
+      
+      const seqStr = keySeq.join('');
+      if (seqStr === 'gd') {
+        navigate('/dashboard');
+        keySeq = [];
+      } else if (seqStr === 'gr') {
+        navigate('/repositories');
+        keySeq = [];
+      } else if (seqStr === 'ga') {
+        navigate('/analysis');
+        keySeq = [];
+      } else {
+        timeout = setTimeout(() => { keySeq = []; }, 500);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [navigate]);
+
   return (
     <div className="flex h-screen overflow-hidden relative" style={{ background: "#050508" }}>
       {/* ── Landing-style animated background ── */}
@@ -21,7 +68,8 @@ export default function DashboardLayout({ children }) {
         }}
       />
 
-      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
+      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} onSearchOpen={() => setSearchOpen(true)} />
+      <GlobalSearch isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0 relative z-10 md:ml-[200px]">
         <DashboardNavbar toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
