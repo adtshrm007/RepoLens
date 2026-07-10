@@ -9,6 +9,7 @@ import HealthScoreBreakdown from '../Components/ui/HealthScoreBreakdown.jsx';
 import ExportModal from '../Components/ui/ExportModal.jsx';
 import { SeverityBars, SeverityDonut } from '../Components/ui/SeverityChart.jsx';
 import { SkeletonCard, SkeletonTable } from '../Components/ui/Skeleton.jsx';
+import { toPng, toSvg } from 'html-to-image';
 
 // ── Small Helpers ─────────────────────────────────────────────────────────
 
@@ -347,31 +348,34 @@ function EnhancedDependencyGraph({ graph }) {
     });
 
   const exportSVG = () => {
-    const svgEl = document.querySelector('.react-flow__viewport svg') || document.querySelector('.react-flow svg');
-    if (!svgEl) { alert('Graph not available for export'); return; }
-    const blob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'dependency-graph.svg'; a.click(); URL.revokeObjectURL(a.href);
+    const el = document.querySelector('.react-flow');
+    if (!el) { alert('Graph not available for export'); return; }
+    toSvg(el, { 
+      filter: (node) => !(node?.classList?.contains('react-flow__minimap') || node?.classList?.contains('react-flow__controls'))
+    })
+      .then((dataUrl) => {
+        const a = document.createElement('a'); 
+        a.href = dataUrl; 
+        a.download = 'dependency-graph.svg'; 
+        a.click(); 
+      })
+      .catch((err) => console.error('SVG export failed', err));
   };
 
   const exportPNG = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const svgEl = document.querySelector('.react-flow svg');
-    if (!svgEl) { alert('Graph not renderable'); return; }
-    const img = new Image();
-    const blob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' });
-    img.src = URL.createObjectURL(blob);
-    img.onload = () => {
-      canvas.width = img.naturalWidth || 1200;
-      canvas.height = img.naturalHeight || 800;
-      ctx.fillStyle = '#050508';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'dependency-graph.png';
-      a.click();
-    };
+    const el = document.querySelector('.react-flow');
+    if (!el) { alert('Graph not renderable'); return; }
+    toPng(el, { 
+      backgroundColor: '#050508', 
+      filter: (node) => !(node?.classList?.contains('react-flow__minimap') || node?.classList?.contains('react-flow__controls'))
+    })
+      .then((dataUrl) => {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = 'dependency-graph.png';
+        a.click();
+      })
+      .catch((err) => console.error('PNG export failed', err));
   };
 
   if (rawNodes.length === 0) return (
