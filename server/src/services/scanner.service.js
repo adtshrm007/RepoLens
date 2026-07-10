@@ -51,25 +51,31 @@ export class ScannerService {
       data: { totalFiles: classifiedFiles.length, status: 'ANALYZING' }
     });
 
-    // 3. Save all files to DB
-    const dbFiles = await Promise.all(classifiedFiles.map(async (file) => {
-      const extension = file.path.split('.').pop() || '';
-      return await prisma.repositoryFile.create({
-        data: {
-          scanId,
-          path: file.path,
-          extension,
-          size: file.size,
-          importanceScore: file.importanceScore,
-          classification: {
-            create: {
-              type: file.classification
+    // 3. Save all files to DB (batched to prevent connection pool exhaustion)
+    const dbFiles = [];
+    const batchSize = 10;
+    for (let i = 0; i < classifiedFiles.length; i += batchSize) {
+      const batch = classifiedFiles.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch.map(async (file) => {
+        const extension = file.path.split('.').pop() || '';
+        return await prisma.repositoryFile.create({
+          data: {
+            scanId,
+            path: file.path,
+            extension,
+            size: file.size,
+            importanceScore: file.importanceScore,
+            classification: {
+              create: {
+                type: file.classification
+              }
             }
-          }
-        },
-        include: { classification: true }
-      });
-    }));
+          },
+          include: { classification: true }
+        });
+      }));
+      dbFiles.push(...batchResults);
+    }
 
     // 4. Take top 50 files for deep AST analysis
     const topFiles = [...dbFiles].sort((a, b) => (b.importanceScore || 0) - (a.importanceScore || 0)).slice(0, 50);
