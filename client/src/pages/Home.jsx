@@ -1,11 +1,11 @@
 import Navbar from "../Components/common/Navbar";
-import Hero from "../Components/landing/Hero";
-import EditorMockup from "../Components/landing/EditorMockup";
-import Logos from "../Components/landing/Logos";
-import Workflow from "../Components/landing/Workflow";
-import Features from "../Components/landing/Features";
-import CallToAction from "../Components/landing/CallToAction";
-import Footer from "../Components/landing/Footer";
+import Hero from "../Components/Landing/Hero";
+import EditorMockup from "../Components/Landing/EditorMockup";
+import Logos from "../Components/Landing/Logos";
+import Workflow from "../Components/Landing/Workflow";
+import Features from "../Components/Landing/Features";
+import CallToAction from "../Components/Landing/CallToAction";
+import Footer from "../Components/Landing/Footer";
 
 function Home() {
   return (
