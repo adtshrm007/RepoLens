@@ -5,24 +5,35 @@ import { useGSAP } from '@gsap/react';
 
 gsap.registerPlugin(ScrollTrigger);
 
-function StatBlock({ label, value, sub, icon, accent = "rgba(255,255,255,0.8)" }) {
+import HealthScoreBreakdown from '../ui/HealthScoreBreakdown.jsx';
+import { SeverityBars, SeverityDonut } from '../ui/SeverityChart.jsx';
+
+function MetricCard({ title, value, subtitle, accent }) {
   return (
-    <div className="p-4 relative overflow-hidden group"
-      style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-      <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: "8px" }}>
-        {label}
-      </div>
-      <div style={{ fontFamily: "monospace", fontSize: "22px", fontWeight: "800", color: accent, lineHeight: 1, marginBottom: "4px" }}>
-        {value}
-      </div>
-      {sub && (
-        <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.25)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-          {sub}
-        </div>
-      )}
-      <div className="absolute right-3 bottom-3 opacity-[0.04] text-white text-4xl select-none pointer-events-none">
-        {icon}
-      </div>
+    <div className="mockup-element" style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: '8px' }}>{title}</div>
+      <div style={{ fontFamily: 'monospace', fontSize: '22px', fontWeight: '800', color: accent || '#fff', lineHeight: 1, marginBottom: '4px' }}>{value}</div>
+      {subtitle && <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+function ScoreRing({ value, label, color, size = 80 }) {
+  const r = (size / 2) - 7;
+  const circ = 2 * Math.PI * r;
+  const fill = ((value || 0) / 100) * circ;
+  const cx = size / 2, cy = size / 2;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="5"
+          strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
+          style={{ transition: 'stroke-dasharray 1s cubic-bezier(0.34,1.12,0.64,1)' }} />
+        <text x={cx} y={cy + 5} textAnchor="middle" fill="#fff" fontSize={size > 70 ? 14 : 11} fontFamily="monospace" fontWeight="700">{value || 0}</text>
+      </svg>
+      <span style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</span>
     </div>
   );
 }
@@ -57,6 +68,25 @@ export default function EditorMockup() {
     });
   }, { scope: container });
 
+  const fakeHealth = { overall: 84, maintainability: 92, security: 78, architecture: 88, documentation: 70 };
+  const fakeMetrics = { largeFilesCount: 2, largeFunctionsCount: 5, deadCodeIndicators: 1, maxNestingDepth: 5, avgFunctionLength: 28, dependencyCount: 140, fileCount: 420 };
+  const fakeFindings = [
+    { severity: 'CRITICAL', type: 'Hardcoded Secret', file: 'auth.js' },
+    { severity: 'HIGH', type: 'Eval Usage', file: 'parser.js' }
+  ];
+  const secCounts = { CRITICAL: 1, HIGH: 1, MEDIUM: 0, LOW: 0 };
+
+  const TABS = [
+    { id: 'overview',     label: 'Overview & Health' },
+    { id: 'complexity',   label: 'Complexity' },
+    { id: 'structure',    label: 'Repo Structure' },
+    { id: 'insights',     label: 'Insights' },
+    { id: 'security',     label: 'Security' },
+    { id: 'architecture', label: 'Dep Graph' },
+    { id: 'onboarding',  label: 'Onboarding' },
+    { id: 'ai',          label: '◆ AI Assistant' },
+  ];
+
   return (
     <section ref={container} className="w-full px-6 flex justify-center mb-32 perspective-[1200px]">
       <div className="editor-window w-full max-w-5xl border border-white/10 rounded-xl overflow-hidden bg-[#050508] shadow-[0_0_80px_rgba(255,255,255,0.03)] backdrop-blur-xl">
@@ -75,121 +105,101 @@ export default function EditorMockup() {
         </div>
 
         {/* Dashboard Body */}
-        <div className="p-6 md:p-8 relative overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/[0.02] via-transparent to-transparent flex flex-col gap-4">
+        <div className="relative overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/[0.02] via-transparent to-transparent flex flex-col">
           
-          {/* Header */}
-          <div className="mockup-element" style={{ padding: "14px 18px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
+          {/* Dashboard Header Bar */}
+          <div className="mockup-element" style={{ padding: '24px 32px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
               <div>
-                <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>
-                  REPOLENS V2 // INTELLIGENCE DASHBOARD
+                <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '8px' }}>
+                  Scan Report // <span style={{ color: '#fff' }}>repo-lens/core</span>
                 </div>
-                <h1 style={{ fontFamily: "monospace", fontSize: "15px", fontWeight: "800", color: "#fff", letterSpacing: "0.03em", margin: 0 }}>
-                  Your Repository Intelligence
-                </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <h1 style={{ margin: 0, fontFamily: 'monospace', fontSize: '24px', fontWeight: '800', letterSpacing: '0.02em', color: '#fff' }}>
+                    Scan #142
+                  </h1>
+                  <span style={{ fontFamily: 'monospace', fontSize: '10px', background: 'rgba(34,197,94,0.1)', color: '#22c55e', padding: '4px 8px', borderRadius: '2px', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    COMPLETED
+                  </span>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button style={{ fontFamily: "monospace", fontSize: "10px", fontWeight: "bold", color: "#000", background: "#fff", border: "1px solid #fff", padding: "8px 16px", cursor: "pointer", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                  + Manual Analysis
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button style={{ fontFamily: 'monospace', fontSize: '10px', color: '#000', background: '#fff', border: '1px solid #fff', padding: '8px 16px', cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  Export Report
                 </button>
               </div>
             </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '20px', overflowX: 'auto' }} className="custom-scrollbar">
+              {TABS.map(t => (
+                <button key={t.id}
+                  style={{
+                    fontFamily: 'monospace', fontSize: '11px', padding: '0 0 12px 0', cursor: 'pointer', background: 'none', border: 'none',
+                    color: t.id === 'overview' ? '#8b5cf6' : 'rgba(255,255,255,0.5)',
+                    borderBottom: t.id === 'overview' ? '2px solid #8b5cf6' : '2px solid transparent',
+                    whiteSpace: 'nowrap'
+                  }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Stats Grid */}
-          <div className="mockup-element flex flex-col gap-[1px] bg-white/[0.04] overflow-hidden">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-[1px]">
-              <StatBlock label="Repositories" value="24" sub="connected" icon="📁" />
-              <StatBlock label="Total Scans" value="142" sub="138 completed" icon="⚡" />
-              <StatBlock label="Files Analyzed" value="12,450" sub="across all scans" icon="📄" />
-              <StatBlock label="Functions Found" value="38,204" sub="4,102 components" icon="ƒ" />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-[1px]">
-              <StatBlock label="Avg. Health" value="84" sub="Good shape" accent="#fff" icon="♥" />
-              <StatBlock label="Security Issues" value="12" sub="2 critical, 5 high" accent="#fff" icon="🔒" />
-              <StatBlock label="Largest Repo" value="frontend-core" sub="4,200 files" icon="🏗" />
-              <StatBlock label="Most Complex" value="legacy-api" sub="health 45" accent="#fff" icon="⚙" />
-            </div>
-          </div>
-
-          {/* Main Grid */}
-          <div className="mockup-element grid grid-cols-1 md:grid-cols-[1fr_320px] gap-3">
+          <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
-            {/* Table */}
-            <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.18em", margin: 0 }}>
-                  Recently Scanned
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table style={{ width: "100%", minWidth: "400px", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: "left", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>REPOSITORY</th>
-                      <th style={{ textAlign: "left", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>FILES</th>
-                      <th style={{ textAlign: "right", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)" }}>HEALTH</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { n: "payment-gateway", f: "142", h: 92, c: "#fff" },
-                      { n: "frontend-core", f: "4,200", h: 78, c: "#ccc" },
-                      { n: "legacy-api", f: "850", h: 45, c: "#888" },
-                    ].map((r, i) => (
-                      <tr key={i}>
-                        <td style={{ padding: "12px 0", borderBottom: i !== 2 ? "1px solid rgba(255,255,255,0.02)" : "none" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <span style={{ color: "rgba(255,255,255,0.15)", fontSize: "10px" }}>&lt;/&gt;</span>
-                            <span style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.8)", fontWeight: "bold" }}>{r.n}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px 0", borderBottom: i !== 2 ? "1px solid rgba(255,255,255,0.02)" : "none", fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.5)" }}>{r.f}</td>
-                        <td style={{ padding: "12px 0", borderBottom: i !== 2 ? "1px solid rgba(255,255,255,0.02)" : "none", textAlign: "right" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px" }}>
-                            <span style={{ fontFamily: "monospace", fontSize: "8px", fontWeight: "bold", color: r.c, border: `1px solid ${r.c}44`, background: `${r.c}0f`, padding: "2px 6px", textTransform: "uppercase" }}>
-                              {r.h >= 80 ? "HEALTHY" : r.h >= 60 ? "FAIR" : "AT RISK"}
-                            </span>
-                            <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "800", color: r.c }}>{r.h}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* Grid for Score & Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: '24px' }}>
+              
+              {/* Health Score Breakdown */}
+              <div className="mockup-element" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h3 style={{ margin: '0 0 14px', fontFamily: 'monospace', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '20px', height: '1px', background: '#8b5cf6' }} />
+                  Health Scores
+                </h3>
+                
+                <div style={{ padding: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', flexWrap: 'wrap', gap: '32px', justifyContent: 'center' }}>
+                  <ScoreRing value={fakeHealth.overall} label="Overall" color="#22c55e" size={100} />
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.06)' }} />
+                  <ScoreRing value={fakeHealth.maintainability} label="Maint." color="#60a5fa" />
+                  <ScoreRing value={fakeHealth.security} label="Security" color="#10b981" />
+                  <ScoreRing value={fakeHealth.architecture} label="Arch." color="#f59e0b" />
+                </div>
 
-            {/* Right Column */}
-            <div className="flex flex-col gap-3">
-              <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
-                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.18em", margin: "0 0 14px" }}>
-                  Security Overview
-                </h2>
-                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                  <div style={{ width: "50px", height: "50px", borderRadius: "50%", border: "4px solid #fff", borderRightColor: "#aaa", borderBottomColor: "#555", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: "12px", color: "#fff", fontWeight: "bold" }}>12</div>
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px", justifyContent: "center" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.5)" }}><span>CRITICAL</span> <span style={{ color: "#fff" }}>2</span></div>
-                    <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}><div style={{ width: "25%", height: "100%", background: "#fff", borderRadius: "2px" }}></div></div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.5)" }}><span>HIGH</span> <span style={{ color: "#aaa" }}>5</span></div>
-                    <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}><div style={{ width: "60%", height: "100%", background: "#aaa", borderRadius: "2px" }}></div></div>
+                <HealthScoreBreakdown health={fakeHealth} metrics={fakeMetrics} findings={fakeFindings} />
+              </div>
+
+              {/* Security & Complexity */}
+              <div className="mockup-element" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                
+                <div>
+                  <h3 style={{ margin: '0 0 14px', fontFamily: 'monospace', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ display: 'inline-block', width: '20px', height: '1px', background: '#f59e0b' }} />
+                    Security Overview
+                  </h3>
+                  <div style={{ padding: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', gap: '24px', alignItems: 'center' }}>
+                    <div style={{ flex: '0 0 auto' }}>
+                      <SeverityDonut data={secCounts} size={100} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <SeverityBars data={secCounts} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
-                <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.18em", margin: "0 0 14px" }}>
-                  Health Trend
-                </h2>
-                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: "20px", fontWeight: "800", color: "#fff" }}>84</span>
-                  <span style={{ fontFamily: "monospace", fontSize: "9px", fontWeight: "bold", color: "#fff" }}>↑12</span>
+                <div>
+                  <h3 style={{ margin: '0 0 14px', fontFamily: 'monospace', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ display: 'inline-block', width: '20px', height: '1px', background: '#60a5fa' }} />
+                    Complexity Metrics
+                  </h3>
+                  <div className="grid grid-cols-2" style={{ gap: '8px' }}>
+                    <MetricCard title="Files Analyzed" value="420" accent="#8b5cf6" />
+                    <MetricCard title="Lines of Code" value="12,450" />
+                    <MetricCard title="React Components" value="45" />
+                    <MetricCard title="Largest Function" value="124" subtitle="lines" accent="#ef4444" />
+                  </div>
                 </div>
-                <div style={{ height: "30px", borderBottom: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "flex-end", gap: "4px" }}>
-                  {[45, 52, 58, 62, 70, 72, 84].map((v, i) => (
-                    <div key={i} style={{ flex: 1, height: `${v}%`, background: "#fff", opacity: i === 6 ? 1 : 0.3, borderRadius: "2px 2px 0 0" }}></div>
-                  ))}
-                </div>
+
               </div>
             </div>
 
