@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
 </p>
 
+### 🌐 [Live Demo: repo-lens-lovat.vercel.app](https://repo-lens-lovat.vercel.app/)
+
 ---
 
 </div>
