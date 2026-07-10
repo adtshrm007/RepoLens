@@ -25,8 +25,9 @@ export class ScoringEngineService {
   calculateMaintainability() {
     let score = 100;
 
-    // Deductions based on metrics
     const {
+      fileCount = 1,
+      functionCount = 1,
       largeFilesCount = 0,
       largeFunctionsCount = 0,
       deadCodeIndicators = 0,
@@ -35,22 +36,29 @@ export class ScoringEngineService {
       avgFunctionLength = 0
     } = this.metrics;
 
-    score -= (largeFilesCount * 5);
-    score -= (largeFunctionsCount * 2);
-    score -= (deadCodeIndicators * 3);
-    score -= (duplicateImports * 1);
+    const safeFileCount = Math.max(1, fileCount);
+    const safeFunctionCount = Math.max(1, functionCount);
+
+    // Deduct based on percentages rather than absolute counts
+    // e.g., if 20% of files are large, deduct 0.2 * 50 = 10 points
+    score -= (largeFilesCount / safeFileCount) * 50;
+    score -= (largeFunctionsCount / safeFunctionCount) * 50;
+
+    // Cap absolute deductions for dead code and duplicate imports
+    score -= Math.min(15, deadCodeIndicators * 2);
+    score -= Math.min(10, duplicateImports * 0.5);
 
     if (maxNestingDepth > 4) {
-      score -= ((maxNestingDepth - 4) * 5);
+      score -= Math.min(15, (maxNestingDepth - 4) * 3);
     }
 
-    if (avgFunctionLength > 30) {
+    if (avgFunctionLength > 50) {
+      score -= 15;
+    } else if (avgFunctionLength > 30) {
       score -= 5;
-    } else if (avgFunctionLength > 50) {
-      score -= 10;
     }
 
-    return Math.max(0, Math.min(100, score));
+    return Math.round(Math.max(0, Math.min(100, score)));
   }
 
   calculateSecurity() {

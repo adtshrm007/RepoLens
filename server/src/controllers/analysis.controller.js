@@ -23,15 +23,23 @@ export const runAnalysis = async (req, res) => {
       return res.status(403).json({ message: "GitHub access token missing" });
     }
 
-    // 1. Fetch file contents from GitHub
+    // 1. Fetch file contents from GitHub concurrently in batches
     const files = [];
-    for (const path of filePaths) {
-      try {
-        const content = await fetchFileContent(user.githubAccessToken, owner, repoName, path);
-        files.push({ path, content });
-      } catch (err) {
-        console.error(`Skipping ${path}: ${err.message}`);
-      }
+    const batchSize = 15;
+    for (let i = 0; i < filePaths.length; i += batchSize) {
+      const batch = filePaths.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(async (path) => {
+          try {
+            const content = await fetchFileContent(user.githubAccessToken, owner, repoName, path);
+            return { path, content };
+          } catch (err) {
+            console.error(`Skipping ${path}: ${err.message}`);
+            return null;
+          }
+        })
+      );
+      files.push(...results.filter(Boolean));
     }
 
     // 2. Run Deterministic Services
@@ -69,31 +77,13 @@ export const runAnalysis = async (req, res) => {
     }
 
     // 5. Save V1.5 analysis results to Database
-    const analysis = await prisma.analysis.create({
+    const analysis = await prisma.repositoryScan.create({
       data: {
         repositoryId: repo.id,
-        overallScore: healthScores.overall,
-        maintainabilityScore: healthScores.maintainability,
-        securityScore: healthScores.security,
         summary: aiInsights.summary,
-        status: "Completed",
-        metrics: {
-          create: {
-            totalLines: metrics.totalLines,
-            fileCount: metrics.fileCount,
-            functionCount: metrics.functionCount,
-            avgFunctionLength: metrics.avgFunctionLength,
-            largestFunction: metrics.largestFunction,
-            maxNestingDepth: metrics.maxNestingDepth,
-            componentCount: metrics.componentCount,
-            hookUsageCount: metrics.hookUsageCount,
-            dependencyCount: metrics.dependencyCount,
-            largeFilesCount: metrics.largeFilesCount,
-            largeFunctionsCount: metrics.largeFunctionsCount,
-            deadCodeIndicators: metrics.deadCodeIndicators,
-            duplicateImports: metrics.duplicateImports
-          }
-        },
+        status: "COMPLETED",
+        totalFiles: filePaths.length,
+        analyzedFiles: files.length,
         securityFindings: {
           create: securityFindingsList.map(f => ({
             type: f.type,
@@ -125,14 +115,35 @@ export const runAnalysis = async (req, res) => {
             entryPoints: aiInsights.onboardingGuide?.entryPoints || [],
             moduleFlow: aiInsights.onboardingGuide?.moduleFlow || []
           }
+        },
+        files: {
+          create: files.map((f, i) => ({
+            path: f.path,
+            extension: f.path.split('.').pop() || "",
+            size: f.content ? f.content.length : 0,
+            isAnalyzed: true,
+            metrics: i === 0 ? {
+              create: {
+                linesOfCode: metrics.totalLines || 0,
+                functionCount: metrics.functionCount || 0,
+                componentCount: metrics.componentCount || 0,
+                hookUsage: metrics.hookUsageCount || 0,
+                avgFunctionLength: metrics.avgFunctionLength || 0,
+                largestFunction: metrics.largestFunction || 0,
+                nestingDepth: metrics.maxNestingDepth || 0,
+                dependencyCount: metrics.dependencyCount || 0,
+                deadCodeIndicators: metrics.deadCodeIndicators || 0
+              }
+            } : undefined
+          }))
         }
       },
       include: {
-        metrics: true,
         healthScore: true,
         dependencyGraph: true,
         securityFindings: true,
-        onboardingGuide: true
+        onboardingGuide: true,
+        files: { include: { metrics: true } }
       }
     });
 
@@ -192,27 +203,37 @@ export const runManualAnalysis = async (req, res) => {
     }
 
     // 3. Save Analysis record
-    const analysis = await prisma.analysis.create({
+    const analysis = await prisma.repositoryScan.create({
       data: {
         repositoryId: repo.id,
-        overallScore: score,
         status: "COMPLETED",
         summary,
-        findings: {
+        totalFiles: 1,
+        analyzedFiles: 1,
+        healthScore: {
+          create: {
+            overall: score || 0,
+            maintainability: 0,
+            security: 0,
+            documentation: 0,
+            architecture: 0,
+          }
+        },
+        securityFindings: {
           create: findings.map(f => ({
-            category: f.category,
-            severity: f.severity,
-            issue: f.issue,
-            reason: f.reason,
-            suggestion: f.suggestion,
-            filePath: f.filePath,
-            lineNumber: f.lineNumber,
-            codeSnippet: f.codeSnippet
+            type: f.category || "General",
+            severity: f.severity || "LOW",
+            description: (f.issue || "") + " - " + (f.reason || ""),
+            recommendation: f.suggestion || "",
+            file: f.filePath || filename,
+            lineNumber: f.lineNumber || 1,
+            snippet: f.codeSnippet || "",
           }))
         }
       },
       include: {
-        findings: true,
+        securityFindings: true,
+        healthScore: true,
       }
     });
 
@@ -258,19 +279,18 @@ export const getAnalysisById = async (req, res) => {
   try {
     // Use findFirst with ownership check to prevent IDOR
     // (users cannot access analyses belonging to other users)
-    const analysis = await prisma.analysis.findFirst({
+    const analysis = await prisma.repositoryScan.findFirst({
       where: {
         id: req.params.id,
         repository: { userId: req.user.id },
       },
       include: { 
         repository: true, 
-        findings: true,
-        metrics: true,
+        securityFindings: true,
         healthScore: true,
         dependencyGraph: true,
-        securityFindings: true,
-        onboardingGuide: true
+        onboardingGuide: true,
+        files: { include: { metrics: true } }
       },
     });
 
@@ -414,10 +434,10 @@ export const generateDocs = async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const getLatestAnalysisData = async (repoId, userId, includeModel) => {
-  const analysis = await prisma.analysis.findFirst({
+  const analysis = await prisma.repositoryScan.findFirst({
     where: { 
       repositoryId: repoId, 
-      status: "Completed",
+      status: "COMPLETED",
       repository: { userId }
     },
     orderBy: { createdAt: "desc" },
