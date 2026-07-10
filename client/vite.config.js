@@ -11,4 +11,13 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'unsafe-none',
     },
   },
+  build: {
+    // Use esbuild for CSS minification — more lenient than Lightning CSS
+    // (avoids parse errors on Vercel's Linux build environment with Vite 8)
+    cssMinify: 'esbuild',
+  },
+  // Enable CJS/ESM interop for packages that Rolldown is stricter about
+  legacy: {
+    inconsistentCjsInterop: true,
+  },
 })

@@ -13,9 +13,9 @@ export default function DashboardNavbar({ toggleSidebar }) {
         borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}
     >
-      <div className="w-full max-w-[1200px] mx-auto px-4 md:px-6 flex items-center justify-between gap-4">
+      <div className="w-full max-w-[1200px] mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile Hamburger & Search */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button 
             onClick={toggleSidebar}
             className="md:hidden text-white/50 hover:text-white transition-colors p-1 flex-shrink-0"
@@ -25,10 +25,10 @@ export default function DashboardNavbar({ toggleSidebar }) {
             </svg>
           </button>
 
-          {/* Search */}
+          {/* Search — hidden on xs, shown from sm */}
           <div
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 h-8"
-            style={{ width: "260px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 h-8 min-w-0"
+            style={{ width: "clamp(140px, 30vw, 260px)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
           >
           <svg
             className="w-3 h-3 shrink-0"
@@ -50,25 +50,25 @@ export default function DashboardNavbar({ toggleSidebar }) {
         </div>
 
         {/* Right: user + settings */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           {/* User info */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             {user?.profilePic ? (
               <img
                 src={user.profilePic}
                 alt={user.name}
-                className="w-6 h-6 rounded-full object-cover grayscale-[20%]"
+                className="w-6 h-6 rounded-full object-cover grayscale-[20%] shrink-0"
                 style={{ border: "1px solid rgba(255,255,255,0.15)" }}
               />
             ) : (
               <div
-                className="w-6 h-6 flex items-center justify-center font-mono font-bold"
+                className="w-6 h-6 flex items-center justify-center font-mono font-bold shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", fontSize: 10, color: "rgba(255,255,255,0.8)" }}
               >
                 {user?.name?.[0]?.toUpperCase() || "U"}
               </div>
             )}
-            <span className="font-mono" style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
+            <span className="hidden sm:inline font-mono truncate max-w-[100px]" style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
               {user?.username || user?.name || "dev"}
             </span>
           </div>
@@ -93,3 +93,4 @@ export default function DashboardNavbar({ toggleSidebar }) {
     </header>
   );
 }
+

@@ -182,13 +182,13 @@ export default function Dashboard() {
             <SkeletonStats count={4} />
           ) : (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "rgba(255,255,255,0.04)" }}>
+              <div className="grid grid-cols-2 md:grid-cols-4" style={{ gap: "1px", background: "rgba(255,255,255,0.04)" }}>
                 <StatBlock label="Repositories" value={stats?.totalRepositories ?? 0} sub="connected" icon="📁" />
                 <StatBlock label="Total Scans" value={stats?.totalScans ?? 0} sub={`${stats?.completedScans ?? 0} completed`} icon="⚡" />
                 <StatBlock label="Files Analyzed" value={(stats?.totalFilesAnalyzed ?? 0).toLocaleString()} sub="across all scans" icon="📄" />
                 <StatBlock label="Functions Found" value={(stats?.totalFunctions ?? 0).toLocaleString()} sub={`${stats?.totalComponents ?? 0} components`} icon="ƒ" />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "rgba(255,255,255,0.04)" }}>
+              <div className="grid grid-cols-2 md:grid-cols-4" style={{ gap: "1px", background: "rgba(255,255,255,0.04)" }}>
                 <StatBlock label="Avg. Health" value={stats?.avgHealth != null ? `${stats.avgHealth}` : "N/A"}
                   sub={stats?.avgHealth >= 80 ? "Good shape" : stats?.avgHealth >= 60 ? "Needs attention" : "Review required"}
                   accent={stats?.avgHealth >= 80 ? "#22c55e" : stats?.avgHealth >= 60 ? "#eab308" : "#ef4444"} icon="♥" />
@@ -207,10 +207,10 @@ export default function Dashboard() {
           )}
 
           {/* ── Main Content Grid ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 320px", gap: "12px" }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_300px]" style={{ gap: "12px" }}>
 
             {/* ── Recent Scans Table ── */}
-            <div style={{ gridColumn: "1 / 3", padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
+            <div className="lg:col-span-2" style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
                 <h2 style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.18em", margin: 0 }}>
                   Recently Scanned
@@ -221,7 +221,8 @@ export default function Dashboard() {
               </div>
 
               {loading ? <SkeletonTable rows={5} /> : (stats?.recentScans?.length > 0 ? (
-                <table className="data-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div className="overflow-x-auto">
+                <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "480px" }}>
                   <thead>
                     <tr>
                       <th style={{ textAlign: "left" }}>Repository</th>
@@ -281,6 +282,7 @@ export default function Dashboard() {
                     })}
                   </tbody>
                 </table>
+                </div>
               ) : (
                 <div style={{ padding: "40px 0", textAlign: "center" }}>
                   <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.15 }}>📊</div>
@@ -332,7 +334,6 @@ export default function Dashboard() {
                     </div>
                     <SparkLine
                       data={trendValues}
-                      width={260}
                       height={48}
                       color={trendValues[trendValues.length - 1] >= 80 ? "#22c55e" : trendValues[trendValues.length - 1] >= 60 ? "#eab308" : "#ef4444"}
                       showDots

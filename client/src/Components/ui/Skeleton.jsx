@@ -28,8 +28,13 @@ export function SkeletonTable({ rows = 4 }) {
 }
 
 export function SkeletonStats({ count = 4 }) {
+  // Mirror the responsive grid used by the real stats
+  const cols = count <= 2 ? count : 2;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${count}, 1fr)`, gap: '1px' }}>
+    <div
+      className={`grid grid-cols-${cols} md:grid-cols-${count}`}
+      style={{ gap: '1px' }}
+    >
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonCard key={i} lines={2} />
       ))}

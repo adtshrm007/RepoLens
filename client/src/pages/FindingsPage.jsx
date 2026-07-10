@@ -395,7 +395,7 @@ export default function FindingsPage() {
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "14px" }}>
               {/* Good Practices */}
               {insights.goodPractices.length > 0 && (
                 <div style={{ padding: "18px 20px", border: "1px solid rgba(34,197,94,0.2)", background: "rgba(34,197,94,0.04)", borderRadius: "2px" }}>

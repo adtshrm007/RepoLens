@@ -564,7 +564,7 @@ export default function V15Dashboard() {
     <DashboardLayout>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '8px', animation: 'fadeUp 0.3s' }}>
         <SkeletonCard lines={2} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+        <div className="grid grid-cols-2 md:grid-cols-4" style={{ gap: '8px' }}>
           {[1,2,3,4].map(i => <SkeletonCard key={i} lines={2} />)}
         </div>
       </div>
@@ -793,7 +793,7 @@ export default function V15Dashboard() {
                 </div>
               </div>
               {(onboarding.entryPoints?.length > 0 || onboarding.moduleFlow?.length > 0) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '12px' }}>
                   <div style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.015)' }}>
                     <SectionLabel color="#10b981" label="Entry Points" />
                     <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>

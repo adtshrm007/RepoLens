@@ -290,3 +290,32 @@ body {
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 .modal-enter { animation: modalIn 0.2s cubic-bezier(0.34, 1.2, 0.64, 1) forwards; }
+
+/* ─── V2: Responsive Utilities ──────────────────────────────── */
+
+/* Prevent horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+}
+
+/* Responsive tables: allow horizontal scroll */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive text sizing */
+@media (max-width: 480px) {
+  .data-table th, .data-table td {
+    font-size: 10px;
+    padding: 8px 4px;
+  }
+}
+
+/* ─── V2: Mobile sidebar overlay tweaks ─────────────────────── */
+@media (max-width: 767px) {
+  /* Ensure content does not shift under navbar on mobile */
+  main {
+    min-height: calc(100vh - 60px);
+  }
+}
