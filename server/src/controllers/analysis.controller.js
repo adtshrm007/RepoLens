@@ -413,9 +413,13 @@ export const generateDocs = async (req, res) => {
 // V1.5 Architecture Endpoints
 // ---------------------------------------------------------------------------
 
-const getLatestAnalysisData = async (repoId, includeModel) => {
+const getLatestAnalysisData = async (repoId, userId, includeModel) => {
   const analysis = await prisma.analysis.findFirst({
-    where: { repositoryId: repoId, status: "Completed" },
+    where: { 
+      repositoryId: repoId, 
+      status: "Completed",
+      repository: { userId }
+    },
     orderBy: { createdAt: "desc" },
     include: { [includeModel]: true }
   });
@@ -424,7 +428,7 @@ const getLatestAnalysisData = async (repoId, includeModel) => {
 
 export const getLatestMetrics = async (req, res) => {
   try {
-    const analysis = await getLatestAnalysisData(req.params.repoId, "metrics");
+    const analysis = await getLatestAnalysisData(req.params.repoId, req.user.id, "metrics");
     if (!analysis || !analysis.metrics) return res.status(404).json({ message: "Metrics not found" });
     res.json(analysis.metrics);
   } catch (error) {
@@ -434,7 +438,7 @@ export const getLatestMetrics = async (req, res) => {
 
 export const getLatestHealth = async (req, res) => {
   try {
-    const analysis = await getLatestAnalysisData(req.params.repoId, "healthScore");
+    const analysis = await getLatestAnalysisData(req.params.repoId, req.user.id, "healthScore");
     if (!analysis || !analysis.healthScore) return res.status(404).json({ message: "Health score not found" });
     res.json(analysis.healthScore);
   } catch (error) {
@@ -444,7 +448,7 @@ export const getLatestHealth = async (req, res) => {
 
 export const getLatestGraph = async (req, res) => {
   try {
-    const analysis = await getLatestAnalysisData(req.params.repoId, "dependencyGraph");
+    const analysis = await getLatestAnalysisData(req.params.repoId, req.user.id, "dependencyGraph");
     if (!analysis || !analysis.dependencyGraph) return res.status(404).json({ message: "Graph not found" });
     res.json(analysis.dependencyGraph);
   } catch (error) {
@@ -454,7 +458,7 @@ export const getLatestGraph = async (req, res) => {
 
 export const getLatestSecurity = async (req, res) => {
   try {
-    const analysis = await getLatestAnalysisData(req.params.repoId, "securityFindings");
+    const analysis = await getLatestAnalysisData(req.params.repoId, req.user.id, "securityFindings");
     if (!analysis || !analysis.securityFindings) return res.status(404).json({ message: "Security findings not found" });
     res.json(analysis.securityFindings);
   } catch (error) {
@@ -464,7 +468,7 @@ export const getLatestSecurity = async (req, res) => {
 
 export const getLatestOnboarding = async (req, res) => {
   try {
-    const analysis = await getLatestAnalysisData(req.params.repoId, "onboardingGuide");
+    const analysis = await getLatestAnalysisData(req.params.repoId, req.user.id, "onboardingGuide");
     if (!analysis || !analysis.onboardingGuide) return res.status(404).json({ message: "Onboarding guide not found" });
     res.json(analysis.onboardingGuide);
   } catch (error) {

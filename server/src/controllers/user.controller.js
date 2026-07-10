@@ -302,7 +302,7 @@ export const logout = (req, res) => {
   const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     expires: new Date(0),
   };
   // Clear both cookies set by generateTokensAndLogin / generateTokensAndRedirect
