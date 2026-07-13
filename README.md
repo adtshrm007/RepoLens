@@ -33,7 +33,7 @@
 
 ## 🌐 Overview
 
-> **RepoLens V2** is a full-stack Code Intelligence Platform designed to audit your technical debt, map your architecture, and flag critical security vulnerabilities in seconds. 
+> **RepoLens V2** is a full-stack Code Intelligence Platform designed to audit your technical debt, map your architecture, and flag critical security vulnerabilities. 
 
 Unlike standard "AI Wrappers" that blindly dump source code into an LLM, RepoLens utilizes a multi-pass **deterministic engine** architecture. It performs deep structural AST parsing and lexical regex scanning entirely in-house using Node.js. LLMs are strictly relegated to a presentation layer—synthesizing our deterministic data into human-readable architecture summaries.
 
@@ -43,9 +43,9 @@ Unlike standard "AI Wrappers" that blindly dump source code into an LLM, RepoLen
 
 ## ⚠️ Known Limitations
 
-While highly optimized for speed and cost, the current "Scan Entire Repository" architecture has a few intentional trade-offs:
+While highly optimized for speed and cost, the current "Full Repository Scan (Top 50 Files)" architecture has a few intentional trade-offs:
 - **Incomplete Context:** To respect GitHub API rate limits and keep scans fast, the deep analysis pipeline only fetches and analyzes the **Top 50** most critical source files per scan.
-- **Shallow Security Checks:** Security scanning relies on deterministic rules (Regex and AST parsing). This catches obvious flaws (e.g., hardcoded secrets, `eval()` usage) perfectly, but it cannot catch complex, multi-file business logic vulnerabilities.
+- **Shallow Security Checks:** Security scanning relies on deterministic rules (Regex and AST parsing). This catches obvious flaws (e.g., hardcoded secrets, `eval()` usage) perfectly, but it cannot catch complex, multi-file business logic vulnerabilities. However, it does guarantee 100% detection of predefined unsafe patterns like dynamic imports and dangerous DOM injections within the analyzed files.
 - **Surface-Level Architecture:** Architecture summaries are deduced from dependency graphs and file names, not a deep semantic understanding of every file's logic.
 
 ---
@@ -62,12 +62,12 @@ RepoLens is powered by a robust backend pipeline of independent, deterministic s
    - Evaluates cognitive complexity without AI.
    - Calculates exact Lines of Code (LOC), function counts, component counts, nesting depth, and largest function sizes per file.
 3. **The Security Scanner:**
-   - **Lexical Pass:** Blazing-fast regex checks for hardcoded AWS keys, secrets, and dangerous DOM injections (`localStorage`, `dangerouslySetInnerHTML`).
+   - **Lexical Pass:** Fast regex checks for hardcoded AWS keys, secrets, and dangerous DOM injections (`localStorage`, `dangerouslySetInnerHTML`).
    - **Structural Pass:** AST tree-walking to detect unsafe structural implementations like `eval()` and dangerous dynamic imports.
 4. **The Scoring Engine:**
    - Mathematically calculates a 0-100 Health Score by weighing technical debt (e.g., deep nesting penalties) against critical security findings.
 5. **The AI Presentation Layer (OpenRouter):**
-   - We **never** pass your raw source code to an LLM. Instead, we compress the findings from the engines above into a deterministic JSON schema. The LLM simply translates this dense schema into readable onboarding guides and architecture summaries, reducing token costs by ~98% and ensuring high accuracy.
+   - We **never** pass your raw source code to an LLM. Instead, we compress the findings from the engines above into a deterministic JSON schema. The LLM simply translates this dense schema into readable onboarding guides and architecture summaries, reducing token costs by ~98% compared to sending full raw source files to the LLM and ensuring high accuracy.
 
 ---
 
@@ -119,6 +119,8 @@ RepoLens is powered by a robust backend pipeline of independent, deterministic s
 ---
 
 ## 🏗 Architecture
+
+<!-- TODO: re-add architecture diagram image -->
 
 ```mermaid
 graph TD
@@ -187,7 +189,7 @@ All routes are prefixed with the base URL (default: `http://localhost:3000`).
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/your-username/RepoLens.git
+git clone [INSERT REAL URL HERE]
 cd RepoLens
 
 # Install Server
