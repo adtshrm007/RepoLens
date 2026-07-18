@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "../Components/common/DashboardLayout.jsx";
 import api from "../services/api.js";
 
@@ -170,10 +170,8 @@ export default function CodeExplorer() {
   const [selectedRepoFile, setSelectedRepoFile] = useState(null); // { path, name }
 
   // Manual mode state
-  const [manualMode, setManualMode] = useState("paste"); // "paste" | "upload"
   const [filename, setFilename] = useState("");
   const [content, setContent] = useState("");
-  const fileInputRef = useRef(null);
 
   // Analysis state
   const [loading, setLoading] = useState(false);
@@ -228,15 +226,6 @@ export default function CodeExplorer() {
     };
     fetchFiles();
   }, [selectedRepo]);
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => setContent(ev.target.result);
-    reader.readAsText(file);
-  };
 
   const handleSelectRepoFile = useCallback((path, name) => {
     setSelectedRepoFile({ path, name });
@@ -457,29 +446,6 @@ export default function CodeExplorer() {
               {/* ── MANUAL MODE ── */}
               {inputMode === "manual" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {/* Sub-tabs */}
-                  <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid rgba(255,255,255,0.07)", paddingBottom: "8px" }}>
-                    {["paste", "upload"].map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setManualMode(m)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          fontFamily: "monospace",
-                          fontSize: "10px",
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          cursor: "pointer",
-                          color: manualMode === m ? "#a78bfa" : "rgba(255,255,255,0.35)",
-                          borderBottom: manualMode === m ? "1px solid #8b5cf6" : "1px solid transparent",
-                          paddingBottom: "4px",
-                        }}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
 
                   {/* Filename */}
                   <div>
@@ -506,59 +472,31 @@ export default function CodeExplorer() {
                     />
                   </div>
 
-                  {/* Content */}
-                  {manualMode === "paste" ? (
-                    <div>
-                      <label style={{ display: "block", fontFamily: "monospace", fontSize: "9px", letterSpacing: "0.15em", color: "rgba(255,255,255,0.35)", marginBottom: "5px", textTransform: "uppercase" }}>
-                        Code
-                      </label>
-                      <textarea
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        placeholder="Paste your code here…"
-                        style={{
-                          width: "100%",
-                          height: "200px",
-                          background: "rgba(0,0,0,0.4)",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          color: "#fff",
-                          fontFamily: "monospace",
-                          fontSize: "11px",
-                          padding: "8px 10px",
-                          outline: "none",
-                          resize: "none",
-                          borderRadius: "3px",
-                          boxSizing: "border-box",
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
+                  {/* Code paste area */}
+                  <div>
+                    <label style={{ display: "block", fontFamily: "monospace", fontSize: "9px", letterSpacing: "0.15em", color: "rgba(255,255,255,0.35)", marginBottom: "5px", textTransform: "uppercase" }}>
+                      Code
+                    </label>
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Paste your code here…"
                       style={{
-                        height: "120px",
-                        border: "1px dashed rgba(139,92,246,0.3)",
-                        background: "rgba(139,92,246,0.04)",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        borderRadius: "4px",
-                        transition: "border-color 0.2s",
+                        width: "100%",
+                        height: "200px",
+                        background: "rgba(0,0,0,0.4)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        color: "#fff",
+                        fontFamily: "monospace",
+                        fontSize: "11px",
+                        padding: "8px 10px",
+                        outline: "none",
+                        resize: "none",
+                        borderRadius: "3px",
+                        boxSizing: "border-box",
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)")}
-                    >
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="1.5" style={{ marginBottom: "6px" }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      <span style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
-                        {filename ? `✓ ${filename}` : "Click to upload file"}
-                      </span>
-                      <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
-                    </div>
-                  )}
+                    />
+                  </div>
                 </div>
               )}
             </div>
