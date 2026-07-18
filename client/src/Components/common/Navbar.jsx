@@ -16,7 +16,7 @@ export default function Navbar() {
             <img src={logo} alt="logo" />
           </div>
           <span className="text-white font-mono font-bold tracking-widest text-sm">
-            CODEATLAS
+            REPOLENS
           </span>
         </Link>
 

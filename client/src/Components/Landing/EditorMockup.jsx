@@ -99,7 +99,7 @@ export default function EditorMockup() {
             <div className="w-3 h-3 rounded-full bg-white/20"></div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-white/30 tracking-[0.2em]">CODEATLAS_V2_INTELLIGENCE</span>
+            <span className="text-[10px] font-mono text-white/30 tracking-[0.2em]">REPOLENS_V2_INTELLIGENCE</span>
           </div>
           <div className="w-16"></div> {/* Spacer */}
         </div>

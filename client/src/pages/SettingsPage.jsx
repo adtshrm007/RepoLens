@@ -15,7 +15,7 @@ export default function SettingsPage() {
       <div className="space-y-4 animate-fade-up max-w-[800px] w-full mx-auto page-enter">
         {/* ── Header ── */}
         <div className="px-5 py-4" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.015)" }}>
-          <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>CODEATLAS V2 // NODE CONFIGURATION</div>
+          <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>REPOLENS V2 // NODE CONFIGURATION</div>
           <h1 className="text-white font-mono font-bold text-[14px] tracking-wide mb-0.5 m-0">
             System Settings &amp; Identity
           </h1>

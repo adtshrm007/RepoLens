@@ -86,7 +86,7 @@ export default function Sidebar({ isOpen, setIsOpen, onSearchOpen }) {
             </div>
             <div>
               <div className="text-white font-mono font-bold tracking-widest" style={{ fontSize: 11, letterSpacing: "0.12em" }}>
-                CODEATLAS
+                REPOLENS
               </div>
               <div className="font-mono tracking-widest mt-0.5" style={{ fontSize: 7, color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em" }}>
                 V2 · INTELLIGENCE
