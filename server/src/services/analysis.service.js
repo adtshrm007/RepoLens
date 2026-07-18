@@ -271,9 +271,15 @@ Files to analyze:
     if (lines.length <= 350) {
       numberedLines = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
     } else {
+      const astFns = extractFunctionsViaAST(content, filePaths[index]);
+      const astOutline = astFns.length > 0
+        ? `[Complete AST structural inventory of all functions across all ${lines.length} lines:\n` +
+          astFns.map(f => `  - ${f.name} (lines ${f.lineRange})`).join('\n') +
+          `]\n\n`
+        : '';
       const topLines = lines.slice(0, 220).map((line, i) => `${i + 1}: ${line}`).join('\n');
       const bottomLines = lines.slice(-130).map((line, i) => `${lines.length - 130 + i + 1}: ${line}`).join('\n');
-      numberedLines = `${topLines}\n\n... [Truncated ${lines.length - 350} middle lines for fast AI analysis (${lines.length} total lines in file)] ...\n\n${bottomLines}`;
+      numberedLines = `${astOutline}${topLines}\n\n... [Truncated ${lines.length - 350} middle lines for fast AI analysis (${lines.length} total lines in file). Refer to the AST structural inventory above for functions defined in the middle] ...\n\n${bottomLines}`;
     }
     prompt += numberedLines;
     prompt += `\n--- End File: ${filePaths[index]} ---\n`;
@@ -360,9 +366,14 @@ export const runCodeExplorer = async (filename, content) => {
   if (lines.length <= 600) {
     numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
   } else {
+    const astOutline = astFunctions.length > 0
+      ? `[Complete AST structural inventory across all ${lines.length} lines of this file:\n` +
+        astFunctions.map(f => `  - ${f.name} (lines ${f.lineRange})`).join('\n') +
+        `]\n\n`
+      : '';
     const topLines = lines.slice(0, 350).map((line, i) => `${i + 1}: ${line}`).join('\n');
     const bottomLines = lines.slice(-250).map((line, i) => `${lines.length - 250 + i + 1}: ${line}`).join('\n');
-    numberedContent = `${topLines}\n\n... [Truncated ${lines.length - 600} middle lines for fast AI analysis (${lines.length} total lines in file)] ...\n\n${bottomLines}`;
+    numberedContent = `${astOutline}${topLines}\n\n... [Truncated ${lines.length - 600} middle lines for fast AI analysis (${lines.length} total lines in file). Refer to the AST structural inventory above for functions defined in the middle] ...\n\n${bottomLines}`;
   }
 
   const prompt = `You are an expert AI software engineer, code reviewer, and security analyst. Perform a deep, thorough analysis of the following code file and return a JSON object strictly matching the schema below.
