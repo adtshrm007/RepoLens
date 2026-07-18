@@ -1,4 +1,54 @@
 import axios from 'axios';
+import * as babelParser from '@babel/parser';
+import _traverse from '@babel/traverse';
+const traverse = _traverse.default || _traverse;
+
+const extractFunctionsViaAST = (content, filename = 'file.js') => {
+  if (!/\.(js|jsx|ts|tsx)$/.test(filename)) return [];
+  const functions = [];
+  try {
+    const ast = babelParser.parse(content, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript', 'classProperties', 'decorators-legacy'],
+      errorRecovery: true
+    });
+    traverse(ast, {
+      Function: (path) => {
+        const start = path.node.loc?.start?.line || 0;
+        const end = path.node.loc?.end?.line || 0;
+        if (start <= 0 || end <= 0) return;
+        const length = end - start + 1;
+        let funcName = path.node.id?.name;
+        if (!funcName && path.parent.type === 'VariableDeclarator') {
+          funcName = path.parent.id.name;
+        }
+        if (!funcName && path.parent.type === 'ObjectProperty') {
+          funcName = path.parent.key.name || path.parent.key.value;
+        }
+        if (!funcName && path.parent.type === 'ClassMethod') {
+          funcName = path.node.key.name || path.node.key.value;
+        }
+        if (!funcName) {
+          funcName = `anonymous_line_${start}`;
+        }
+        let complexity = "LOW";
+        if (length > 50) complexity = "HIGH";
+        else if (length > 25) complexity = "MEDIUM";
+
+        functions.push({
+          name: funcName,
+          lineRange: `${start}-${end}`,
+          purpose: `Function of ${length} lines defined at lines ${start}-${end}.`,
+          complexity,
+          improvement: null
+        });
+      }
+    });
+  } catch (e) {
+    console.warn(`AST function extraction failed for ${filename}:`, e.message);
+  }
+  return functions;
+};
 
 // ---------------------------------------------------------------------------
 // Shared OpenRouter call — deduplicated from the 3 near-identical copies
@@ -217,7 +267,14 @@ Files to analyze:
   fileContents.forEach((content, index) => {
     prompt += `\n--- File: ${filePaths[index]} ---\n`;
     const lines = content.split('\n');
-    const numberedLines = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+    let numberedLines = '';
+    if (lines.length <= 350) {
+      numberedLines = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+    } else {
+      const topLines = lines.slice(0, 220).map((line, i) => `${i + 1}: ${line}`).join('\n');
+      const bottomLines = lines.slice(-130).map((line, i) => `${lines.length - 130 + i + 1}: ${line}`).join('\n');
+      numberedLines = `${topLines}\n\n... [Truncated ${lines.length - 350} middle lines for fast AI analysis (${lines.length} total lines in file)] ...\n\n${bottomLines}`;
+    }
     prompt += numberedLines;
     prompt += `\n--- End File: ${filePaths[index]} ---\n`;
   });
@@ -294,7 +351,19 @@ Output strictly valid JSON with this schema:
 // ---------------------------------------------------------------------------
 export const runCodeExplorer = async (filename, content) => {
   const lines = content.split('\n');
-  const numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+  
+  // 1. Instant deterministic AST function extraction
+  const astFunctions = extractFunctionsViaAST(content, filename);
+
+  // 2. Smart windowing/truncation for large files (> 600 lines) so AI prompt stays small & fast
+  let numberedContent = '';
+  if (lines.length <= 600) {
+    numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
+  } else {
+    const topLines = lines.slice(0, 350).map((line, i) => `${i + 1}: ${line}`).join('\n');
+    const bottomLines = lines.slice(-250).map((line, i) => `${lines.length - 250 + i + 1}: ${line}`).join('\n');
+    numberedContent = `${topLines}\n\n... [Truncated ${lines.length - 600} middle lines for fast AI analysis (${lines.length} total lines in file)] ...\n\n${bottomLines}`;
+  }
 
   const prompt = `You are an expert AI software engineer, code reviewer, and security analyst. Perform a deep, thorough analysis of the following code file and return a JSON object strictly matching the schema below.
 Output MUST be strictly valid JSON. Do NOT include unescaped newlines or tabs inside strings. Escape them as \\n and \\t.
@@ -313,8 +382,8 @@ Quality bar — every field must meet this standard. DO NOT USE GENERIC OR SHALL
 - "vulnerabilities[].description": 3-4 sentences — explicitly explain the vulnerability mechanism (e.g., "User input from req.body.id is passed directly into a raw SQL query without sanitization"), how an attacker would exploit it, and the worst-case impact.
 - "vulnerabilities[].recommendation": Specific fix steps with a fully corrected code example (escaped as a single line).
 
-IMPORTANT: For the "functions" array, you MUST extract and include EVERY SINGLE function defined in the file. Do not skip any function, no matter how small or trivial it seems. The user wants a complete inventory of all functions.
-IMPORTANT: For the "notableLines" array, ONLY include lines that are interesting, complex, have issues, improvements, or security concerns. Do NOT include every line — only notable ones (max 60 lines). Skip blank lines, simple imports with no issues, and trivial closing braces.
+IMPORTANT: For the "functions" array, only include up to the top 10 most complex or critical functions with detailed purposes and improvements. Our backend AST parser automatically identifies the exact lines for every function.
+IMPORTANT: For the "notableLines" array, ONLY include the top 12-15 most notable or critical lines (max 15 lines total). Do NOT include more than 15 notable lines as concise focus is key. Skip blank lines, simple imports, and trivial closing braces.
 
 Schema:
 {
@@ -369,6 +438,26 @@ ${numberedContent}
     const raw = await callOpenRouter(prompt);
     const parsed = parseModelJson(raw);
 
+    // 3. Merge deterministic AST functions with AI insights
+    const aiFunctions = validateFunctions(parsed.functions, lines);
+    let finalFunctions = astFunctions.length > 0 ? [...astFunctions] : [...aiFunctions];
+    
+    if (astFunctions.length > 0 && aiFunctions.length > 0) {
+      // Enrich AST functions with AI purpose/improvement where names or ranges match
+      finalFunctions = astFunctions.map(astFn => {
+        const match = aiFunctions.find(aiFn => aiFn.name === astFn.name || aiFn.lineRange === astFn.lineRange);
+        if (match) {
+          return {
+            ...astFn,
+            purpose: match.purpose || astFn.purpose,
+            complexity: match.complexity || astFn.complexity,
+            improvement: match.improvement || astFn.improvement
+          };
+        }
+        return astFn;
+      });
+    }
+
     const securityReport = parsed.securityReport
       ? { ...parsed.securityReport, vulnerabilities: validateVulnerabilities(parsed.securityReport.vulnerabilities, lines) }
       : null;
@@ -376,7 +465,7 @@ ${numberedContent}
     return {
       purpose: parsed.purpose || "",
       architecture: parsed.architecture || "",
-      functions: validateFunctions(parsed.functions, lines),
+      functions: finalFunctions,
       notableLines: validateNotableLines(parsed.notableLines, lines),
       improvements: parsed.improvements || [],
       securityReport,

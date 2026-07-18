@@ -323,6 +323,13 @@ export const exploreManualCode = async (req, res) => {
       return res.status(401).json({ message: "User not found" });
     }
 
+    if (typeof content !== 'string' || content.length > 1_000_000) {
+      return res.status(400).json({ message: "File is too large (> 1 MB) for line-by-line Code Explorer analysis." });
+    }
+    if (content.split('\n').length <= 3 && content.length > 50_000) {
+      return res.status(400).json({ message: "Minified/bundled files cannot be analyzed with line-by-line Code Explorer." });
+    }
+
     const explanation = await runCodeExplorer(filename, content);
 
     res.status(200).json({ explanation });
@@ -350,6 +357,13 @@ export const exploreRepoFile = async (req, res) => {
 
     // Fetch file content from GitHub
     const content = await fetchFileContent(user.githubAccessToken, owner, repoName, filePath);
+    if (typeof content !== 'string' || content.length > 1_000_000) {
+      return res.status(400).json({ message: "File is too large (> 1 MB) for line-by-line Code Explorer analysis." });
+    }
+    if (content.split('\n').length <= 3 && content.length > 50_000) {
+      return res.status(400).json({ message: "Minified/bundled files cannot be analyzed with line-by-line Code Explorer." });
+    }
+
     const explanation = await runCodeExplorer(filePath, content);
 
     // Upsert the documentation
