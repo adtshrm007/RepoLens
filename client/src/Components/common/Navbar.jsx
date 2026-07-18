@@ -16,17 +16,17 @@ export default function Navbar() {
             <img src={logo} alt="logo" />
           </div>
           <span className="text-white font-mono font-bold tracking-widest text-sm">
-            REPOLENS
+            CODEATLAS
           </span>
         </Link>
 
         {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-8 text-[10px] font-mono tracking-widest text-white/70 absolute left-1/2 -translate-x-1/2">
-          <a href="#" className="hover:text-white transition-colors cursor-pointer">FEATURES</a>
-          <a href="#" className="hover:text-white transition-colors cursor-pointer">DOCUMENTATION</a>
-          <a href="#" className="hover:text-white transition-colors cursor-pointer">ENTERPRISE</a>
-          <a href="#" className="hover:text-white transition-colors cursor-pointer">PRICING</a>
-          <a href="#" className="hover:text-white transition-colors cursor-pointer">BLOG</a>
+          <a href="#features" className="hover:text-white transition-colors cursor-pointer">FEATURES</a>
+          <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors cursor-pointer">DOCUMENTATION</a>
+          <a href="/auth" className="hover:text-white transition-colors cursor-pointer">ENTERPRISE</a>
+          <a href="#pricing" className="hover:text-white transition-colors cursor-pointer">PRICING</a>
+          <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors cursor-pointer">BLOG</a>
         </div>
 
         {/* Actions (Desktop) */}
@@ -111,11 +111,11 @@ export default function Navbar() {
       {isOpen && (
         <div className="md:hidden absolute top-16 left-0 w-full bg-[#0a0a0c]/95 backdrop-blur-xl border-b border-white/10 shadow-2xl py-6 px-6 flex flex-col gap-6 font-mono text-sm tracking-widest">
           <div className="flex flex-col gap-4 text-white/70">
-            <a href="#" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>FEATURES</a>
-            <a href="#" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>DOCUMENTATION</a>
-            <a href="#" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>ENTERPRISE</a>
-            <a href="#" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>PRICING</a>
-            <a href="#" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>BLOG</a>
+            <a href="#features" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>FEATURES</a>
+            <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>DOCUMENTATION</a>
+            <a href="/auth" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>ENTERPRISE</a>
+            <a href="#pricing" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>PRICING</a>
+            <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors block" onClick={() => setIsOpen(false)}>BLOG</a>
           </div>
           <div className="flex flex-col gap-4 pt-4 border-t border-white/10">
             {user ? (

@@ -69,7 +69,7 @@ export default function CompareScans() {
       <div className="space-y-4 page-enter">
         {/* Header */}
         <div style={{ padding: "14px 18px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)" }}>
-          <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>REPOLENS V2 // SCAN COMPARISON</div>
+          <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>CODEATLAS V2 // SCAN COMPARISON</div>
           <h1 style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "800", color: "#fff", margin: 0 }}>Compare Scans</h1>
           <p style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.35)", margin: "2px 0 0" }}>Side-by-side analysis of two scans or repositories</p>
         </div>

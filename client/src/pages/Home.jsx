@@ -21,8 +21,8 @@ function Home() {
             <EditorMockup />
             <Logos />
             <Workflow />
-            <Features />
-            <CallToAction />
+            <section id="features"><Features /></section>
+            <section id="pricing"><CallToAction /></section>
           </main>
           <Footer />
         </div>

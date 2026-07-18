@@ -134,7 +134,7 @@ export default function Dashboard() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "4px" }}>
-                  REPOLENS V2 // INTELLIGENCE DASHBOARD
+                  CODEATLAS V2 // INTELLIGENCE DASHBOARD
                 </div>
                 <h1 style={{ fontFamily: "monospace", fontSize: "15px", fontWeight: "800", color: "#fff", letterSpacing: "0.03em", margin: 0 }}>
                   {user?.name ? `${user.name.split(" ")[0]}'s` : "Your"} Repository Intelligence

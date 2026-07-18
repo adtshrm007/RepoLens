@@ -7,10 +7,10 @@ export default function Logos() {
         {[...Array(2)].map((_, i) => (
           <div key={i} className="flex items-center gap-12 px-6">
             <span className="text-sm font-mono tracking-[0.2em] text-white/50 uppercase">
-              REPOLENS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS • 
+              CODEATLAS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS • 
             </span>
             <span className="text-sm font-mono tracking-[0.2em] text-white/50 uppercase">
-              REPOLENS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS •
+              CODEATLAS • UNIFIED INTELLIGENCE WORKFLOW • AI-POWERED REPOSITORY INTELLIGENCE • AUTOMATED ARCHITECTURE INSIGHTS • PROFESSIONAL GRADE TOOLS •
             </span>
           </div>
         ))}
