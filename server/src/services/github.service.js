@@ -43,31 +43,34 @@ export const fetchRepositoryDetails = async (accessToken, owner, repo) => {
   }
 };
 
-export const fetchRepositoryTree = async (accessToken, owner, repo) => {
+export const fetchRepositoryTree = async (accessToken, owner, repo, path = "") => {
   const octokit = getOctokit(accessToken);
   try {
-    // 1. Get the default branch (e.g. main or master)
-    const { data: repoData } = await octokit.rest.repos.get({
+    // Use GitHub Contents API — returns only the immediate children of `path`
+    // (not recursive), so folders and files are correctly separated.
+    const { data } = await octokit.rest.repos.getContent({
       owner,
       repo,
-    });
-    const defaultBranch = repoData.default_branch;
-
-    // 2. Fetch the recursive tree
-    const { data: treeData } = await octokit.rest.git.getTree({
-      owner,
-      repo,
-      tree_sha: defaultBranch,
-      recursive: '1',
+      path,          // empty string = repo root
     });
 
-    // 3. Format the response
-    const files = treeData.tree.map((item) => ({
-      name: item.path.split('/').pop(),
-      path: item.path,
-      type: item.type === 'blob' ? 'file' : 'dir',
+    // getContent returns an array for directories, an object for files.
+    // We always call it on a directory path, so data will be an array.
+    const items = Array.isArray(data) ? data : [data];
+
+    const files = items.map((item) => ({
+      name: item.name,          // just the filename, no path prefix
+      path: item.path,          // full path from repo root
+      type: item.type === 'file' ? 'file' : 'dir',
       size: item.size || 0,
     }));
+
+    // Sort: directories first, then files, both alphabetically
+    files.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
     return { files };
   } catch (error) {
     if (error.status === 401) {
@@ -75,7 +78,7 @@ export const fetchRepositoryTree = async (accessToken, owner, repo) => {
       err.status = 401;
       throw err;
     }
-    console.error("Error fetching repository tree recursively:", error);
+    console.error("Error fetching repository contents:", error);
     throw new Error("Failed to fetch repository tree");
   }
 };

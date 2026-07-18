@@ -87,35 +87,17 @@ export const getRepoTechStack = async (req, res) => {
 
     let packageJsonData = { dependencies: {}, devDependencies: {}, scripts: {} };
     try {
-      // 1. Fetch entire repository tree
-      const { files } = await fetchRepositoryTree(user.githubAccessToken, owner, repo);
-      
-      // 2. Find all package.json files (ignoring node_modules)
-      const packageFiles = files.filter(f => 
-        f.type === 'file' && 
-        f.name === 'package.json' && 
-        !f.path.includes('node_modules')
-      );
-
-      // 3. Fetch and parse all package.json files concurrently
-      const contents = await Promise.all(
-        packageFiles.map(f => fetchFileContent(user.githubAccessToken, owner, repo, f.path).catch(() => null))
-      );
-
-      // 4. Merge all dependencies and scripts
-      for (const content of contents) {
-        if (!content) continue;
-        try {
-          const parsed = JSON.parse(content);
-          packageJsonData.dependencies = { ...packageJsonData.dependencies, ...(parsed.dependencies || {}) };
-          packageJsonData.devDependencies = { ...packageJsonData.devDependencies, ...(parsed.devDependencies || {}) };
-          packageJsonData.scripts = { ...packageJsonData.scripts, ...(parsed.scripts || {}) };
-        } catch (err) {
-          // invalid json, ignore
-        }
+      // Directly fetch the root package.json — most repos only have one
+      const content = await fetchFileContent(user.githubAccessToken, owner, repo, "package.json");
+      if (content) {
+        const parsed = JSON.parse(content);
+        packageJsonData.dependencies = parsed.dependencies || {};
+        packageJsonData.devDependencies = parsed.devDependencies || {};
+        packageJsonData.scripts = parsed.scripts || {};
       }
     } catch (e) {
-      console.log("Error scanning for package.json files", e);
+      // package.json might not exist or parsing failed — return empty
+      console.log("Could not fetch package.json:", e.message);
     }
 
     res.json(packageJsonData);
