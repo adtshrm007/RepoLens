@@ -17,6 +17,23 @@
 
 ---
 
+## 📸 Screenshots
+
+### Dashboard Overview
+![Dashboard](screenshots/dashboard.png)
+
+### Repositories List
+![Repositories](screenshots/repositories.png)
+
+### Scan Details & Insights
+![Scan Details](screenshots/scan_detail.png)
+
+### Code Explorer
+![Code Explorer](screenshots/code_explorer.png)
+
+---
+
+
 </div>
 
 ## 📖 Table of Contents
