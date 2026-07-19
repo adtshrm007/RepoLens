@@ -267,20 +267,7 @@ Files to analyze:
   fileContents.forEach((content, index) => {
     prompt += `\n--- File: ${filePaths[index]} ---\n`;
     const lines = content.split('\n');
-    let numberedLines = '';
-    if (lines.length <= 350) {
-      numberedLines = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
-    } else {
-      const astFns = extractFunctionsViaAST(content, filePaths[index]);
-      const astOutline = astFns.length > 0
-        ? `[Complete AST structural inventory of all functions across all ${lines.length} lines:\n` +
-          astFns.map(f => `  - ${f.name} (lines ${f.lineRange})`).join('\n') +
-          `]\n\n`
-        : '';
-      const topLines = lines.slice(0, 220).map((line, i) => `${i + 1}: ${line}`).join('\n');
-      const bottomLines = lines.slice(-130).map((line, i) => `${lines.length - 130 + i + 1}: ${line}`).join('\n');
-      numberedLines = `${astOutline}${topLines}\n\n... [Truncated ${lines.length - 350} middle lines for fast AI analysis (${lines.length} total lines in file). Refer to the AST structural inventory above for functions defined in the middle] ...\n\n${bottomLines}`;
-    }
+    const numberedLines = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
     prompt += numberedLines;
     prompt += `\n--- End File: ${filePaths[index]} ---\n`;
   });
@@ -357,24 +344,7 @@ Output strictly valid JSON with this schema:
 // ---------------------------------------------------------------------------
 export const runCodeExplorer = async (filename, content) => {
   const lines = content.split('\n');
-  
-  // 1. Instant deterministic AST function extraction
-  const astFunctions = extractFunctionsViaAST(content, filename);
-
-  // 2. Smart windowing/truncation for large files (> 600 lines) so AI prompt stays small & fast
-  let numberedContent = '';
-  if (lines.length <= 600) {
-    numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
-  } else {
-    const astOutline = astFunctions.length > 0
-      ? `[Complete AST structural inventory across all ${lines.length} lines of this file:\n` +
-        astFunctions.map(f => `  - ${f.name} (lines ${f.lineRange})`).join('\n') +
-        `]\n\n`
-      : '';
-    const topLines = lines.slice(0, 350).map((line, i) => `${i + 1}: ${line}`).join('\n');
-    const bottomLines = lines.slice(-250).map((line, i) => `${lines.length - 250 + i + 1}: ${line}`).join('\n');
-    numberedContent = `${astOutline}${topLines}\n\n... [Truncated ${lines.length - 600} middle lines for fast AI analysis (${lines.length} total lines in file). Refer to the AST structural inventory above for functions defined in the middle] ...\n\n${bottomLines}`;
-  }
+  const numberedContent = lines.map((line, i) => `${i + 1}: ${line}`).join('\n');
 
   const prompt = `You are an expert AI software engineer, code reviewer, and security analyst. Perform a deep, thorough analysis of the following code file and return a JSON object strictly matching the schema below.
 Output MUST be strictly valid JSON. Do NOT include unescaped newlines or tabs inside strings. Escape them as \\n and \\t.
@@ -392,9 +362,6 @@ Quality bar — every field must meet this standard. DO NOT USE GENERIC OR SHALL
 - "securityReport.summary": 4-5 sentences covering the specific attack surface of this file, the data it handles (e.g., PII, tokens, user input), what security controls are present, and the most urgent unmitigated risk.
 - "vulnerabilities[].description": 3-4 sentences — explicitly explain the vulnerability mechanism (e.g., "User input from req.body.id is passed directly into a raw SQL query without sanitization"), how an attacker would exploit it, and the worst-case impact.
 - "vulnerabilities[].recommendation": Specific fix steps with a fully corrected code example (escaped as a single line).
-
-IMPORTANT: For the "functions" array, only include up to the top 10 most complex or critical functions with detailed purposes and improvements. Our backend AST parser automatically identifies the exact lines for every function.
-IMPORTANT: For the "notableLines" array, ONLY include the top 12-15 most notable or critical lines (max 15 lines total). Do NOT include more than 15 notable lines as concise focus is key. Skip blank lines, simple imports, and trivial closing braces.
 
 Schema:
 {
@@ -449,23 +416,15 @@ ${numberedContent}
     const raw = await callOpenRouter(prompt);
     const parsed = parseModelJson(raw);
 
-    // 3. Merge deterministic AST functions with AI insights
     const aiFunctions = validateFunctions(parsed.functions, lines);
-    let finalFunctions = astFunctions.length > 0 ? [...astFunctions] : [...aiFunctions];
-    
-    if (astFunctions.length > 0 && aiFunctions.length > 0) {
-      // Enrich AST functions with AI purpose/improvement where names or ranges match
-      finalFunctions = astFunctions.map(astFn => {
-        const match = aiFunctions.find(aiFn => aiFn.name === astFn.name || aiFn.lineRange === astFn.lineRange);
-        if (match) {
-          return {
-            ...astFn,
-            purpose: match.purpose || astFn.purpose,
-            complexity: match.complexity || astFn.complexity,
-            improvement: match.improvement || astFn.improvement
-          };
+    const astFunctions = extractFunctionsViaAST(content, filename);
+    let finalFunctions = aiFunctions.length > 0 ? [...aiFunctions] : [...astFunctions];
+    if (aiFunctions.length > 0 && astFunctions.length > 0) {
+      astFunctions.forEach(astFn => {
+        const exists = aiFunctions.some(aiFn => aiFn.name === astFn.name || aiFn.lineRange === astFn.lineRange);
+        if (!exists) {
+          finalFunctions.push(astFn);
         }
-        return astFn;
       });
     }
 
