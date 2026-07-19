@@ -8,7 +8,7 @@ router.use(verifyToken);
 
 router.post('/', startScan);
 router.get('/:id/status', getScanStatus);
-router.get('/:id', getScanFullPayload);
 router.get('/:id/files', getScanFiles);
+router.get('/:id', getScanFullPayload);
 
 export default router;

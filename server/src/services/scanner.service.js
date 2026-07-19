@@ -28,12 +28,16 @@ export class ScannerService {
     });
 
     // 2. Launch background job (do not await)
-    this.runPipeline(scan.id).catch(err => {
+    this.runPipeline(scan.id).catch(async (err) => {
       console.error(`Pipeline failed for scan ${scan.id}:`, err);
-      prisma.repositoryScan.update({
-        where: { id: scan.id },
-        data: { status: 'FAILED', summary: `Error: ${err.message}` }
-      }).catch(console.error);
+      try {
+        await prisma.repositoryScan.update({
+          where: { id: scan.id },
+          data: { status: 'FAILED', summary: `Error: ${err.message}` }
+        });
+      } catch (dbErr) {
+        console.error('Failed to mark scan as FAILED:', dbErr);
+      }
     });
 
     return scan.id;
@@ -63,7 +67,7 @@ export class ScannerService {
             scanId,
             path: file.path,
             extension,
-            size: file.size,
+            size: file.size ?? 0,
             importanceScore: file.importanceScore,
             classification: {
               create: {
@@ -156,7 +160,7 @@ export class ScannerService {
           severity: f.severity,
           file: f.file,
           lineNumber: f.lineNumber,
-          snippet: f.snippet.substring(0, 500),
+          snippet: (f.snippet || '').substring(0, 500),
           description: f.description,
           recommendation: f.recommendation || "Review and secure this code segment."
         }))

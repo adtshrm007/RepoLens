@@ -9,6 +9,7 @@ export class SecurityScannerService {
   }
 
   scanFiles(files) {
+    this.findings = []; // reset on each call — prevents bleed-over if instance is reused
     files.forEach(file => {
       this.scanFile(file.path, file.content);
     });

@@ -126,6 +126,9 @@ export const googleLogin = async (req, res) => {
     const userInfoRes = await fetch(
       `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`,
     );
+    if (!userInfoRes.ok) {
+      throw new Error(`Google userinfo API failed with status ${userInfoRes.status}`);
+    }
     const userInfo = await userInfoRes.json();
 
     const googleId = tokenInfo.sub;
@@ -190,6 +193,11 @@ export const githubLogin = async (req, res) => {
 
 export const githubCallback = async (req, res) => {
   const code = req.query.code;
+  const oauthError = req.query.error;
+
+  if (oauthError || !code) {
+    return res.redirect(`${process.env.CLIENT_URL}/auth?error=${oauthError || 'no_code'}`);
+  }
 
   try {
     // 1. Exchange code for access token

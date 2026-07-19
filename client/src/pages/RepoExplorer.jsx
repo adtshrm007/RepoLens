@@ -186,7 +186,7 @@ export default function RepoExplorer() {
             </div>
             {error === "Your GitHub connection has expired." && (
               <a
-                href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/auth/github`}
+                href={`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/auth/github`}
                 className="px-6 py-2.5 bg-white text-black font-mono text-[11px] font-bold uppercase tracking-[0.2em] hover:bg-white/90 transition-colors"
                 style={{ textDecoration: "none" }}
               >

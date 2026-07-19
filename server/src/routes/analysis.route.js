@@ -20,13 +20,15 @@ router.get("/history", getAnalysisHistory);
 router.get("/dashboard-stats", getDashboardStats);
 router.get("/compare", compareScansByIds);
 router.get("/search", globalSearch);
-router.get("/:id", getAnalysisById);
 
-// V1.5 Endpoints
+// V1.5 Endpoints — must come before /:id wildcard
 router.get("/repo/:repoId/latest/metrics", getLatestMetrics);
 router.get("/repo/:repoId/latest/health", getLatestHealth);
 router.get("/repo/:repoId/latest/graph", getLatestGraph);
 router.get("/repo/:repoId/latest/security", getLatestSecurity);
 router.get("/repo/:repoId/latest/onboarding", getLatestOnboarding);
+
+// Wildcard last — must not shadow any specific routes above
+router.get("/:id", getAnalysisById);
 
 export default router;

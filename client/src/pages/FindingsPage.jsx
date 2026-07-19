@@ -117,12 +117,12 @@ export default function FindingsPage() {
       </DashboardLayout>
     );
 
-  const findings = analysis.findings || [];
+  const findings = analysis.securityFindings || [];
   const filtered = filter === "all" ? findings : findings.filter((f) => f.severity === filter);
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   findings.forEach((f) => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
 
-  const overallScore = Math.round(analysis.overallScore || 0);
+  const overallScore = Math.round(analysis.healthScore?.overall || 0);
   const maintScore = insights.maintainabilityScore !== null ? Math.round(insights.maintainabilityScore) : null;
 
   return (
