@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import DashboardLayout from "../Components/common/DashboardLayout.jsx";
 import api from "../services/api.js";
 
@@ -64,36 +64,22 @@ function Chip({ color, children }) {
 }
 
 /* Simple inline file-tree for repo picker */
-function FileItem({ item, owner, repo, onSelectFile, selectedPath, depth = 0 }) {
+function FileItem({ item, owner, repo, onSelectFile, depth = 0 }) {
   const [open, setOpen] = useState(false);
   const [children, setChildren] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const isDir = item.type === "dir";
 
-  // Always show only the basename — guards against APIs that put full paths in `name`
-  const displayName = item.name.includes("/")
-    ? item.name.split("/").pop()
-    : item.name;
-
-  const isSelected = !isDir && selectedPath === item.path;
-
   const toggle = async () => {
     if (!isDir) {
-      onSelectFile(item.path, displayName);
+      onSelectFile(item.path, item.name);
       return;
     }
     if (!open && children.length === 0) {
       setLoadingChildren(true);
       try {
         const { data } = await api.get(`/repos/${owner}/${repo}/files?path=${item.path}`);
-        // Deduplicate by path to prevent repeated entries
-        const seen = new Set();
-        const unique = (data.files || []).filter((f) => {
-          if (seen.has(f.path)) return false;
-          seen.add(f.path);
-          return true;
-        });
-        setChildren(unique);
+        setChildren(data.files || []);
       } catch {
         // ignore
       } finally {
@@ -116,14 +102,12 @@ function FileItem({ item, owner, repo, onSelectFile, selectedPath, depth = 0 }) 
           cursor: "pointer",
           fontFamily: "monospace",
           fontSize: "11px",
-          color: isSelected ? "#a78bfa" : isDir ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.5)",
-          background: isSelected ? "rgba(139,92,246,0.12)" : "transparent",
-          borderLeft: isSelected ? "2px solid #8b5cf6" : "2px solid transparent",
+          color: isDir ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.5)",
           transition: "background 0.15s",
           borderRadius: "3px",
         }}
-        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         {isDir ? (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
@@ -134,23 +118,15 @@ function FileItem({ item, owner, repo, onSelectFile, selectedPath, depth = 0 }) 
             )}
           </svg>
         ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isSelected ? "#8b5cf6" : "rgba(255,255,255,0.3)"} strokeWidth="2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         )}
-        <span>{displayName}</span>
+        <span>{item.name}</span>
         {loadingChildren && <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "9px" }}>...</span>}
       </div>
       {open && children.map((child) => (
-        <FileItem
-          key={child.path}
-          item={child}
-          owner={owner}
-          repo={repo}
-          onSelectFile={onSelectFile}
-          selectedPath={selectedPath}
-          depth={depth + 1}
-        />
+        <FileItem key={child.path} item={child} owner={owner} repo={repo} onSelectFile={onSelectFile} depth={depth + 1} />
       ))}
     </div>
   );
@@ -170,8 +146,10 @@ export default function CodeExplorer() {
   const [selectedRepoFile, setSelectedRepoFile] = useState(null); // { path, name }
 
   // Manual mode state
+  const [manualMode, setManualMode] = useState("paste"); // "paste" | "upload"
   const [filename, setFilename] = useState("");
   const [content, setContent] = useState("");
+  const fileInputRef = useRef(null);
 
   // Analysis state
   const [loading, setLoading] = useState(false);
@@ -209,14 +187,7 @@ export default function CodeExplorer() {
       setSelectedRepoFile(null);
       try {
         const { data } = await api.get(`/repos/${selectedRepo.owner}/${selectedRepo.name}/files`);
-        // Deduplicate root files by path
-        const seen = new Set();
-        const unique = (data.files || []).filter((f) => {
-          if (seen.has(f.path)) return false;
-          seen.add(f.path);
-          return true;
-        });
-        setRootFiles(unique);
+        setRootFiles(data.files || []);
       } catch (err) {
         if (err?.response?.data?.code === "GITHUB_TOKEN_EXPIRED") {
           setError("Your GitHub connection has expired.");
@@ -226,6 +197,15 @@ export default function CodeExplorer() {
     };
     fetchFiles();
   }, [selectedRepo]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => setContent(ev.target.result);
+    reader.readAsText(file);
+  };
 
   const handleSelectRepoFile = useCallback((path, name) => {
     setSelectedRepoFile({ path, name });
@@ -416,7 +396,6 @@ export default function CodeExplorer() {
                             owner={selectedRepo.owner}
                             repo={selectedRepo.name}
                             onSelectFile={handleSelectRepoFile}
-                            selectedPath={selectedRepoFile?.path}
                           />
                         ))}
                       </div>
@@ -446,6 +425,29 @@ export default function CodeExplorer() {
               {/* ── MANUAL MODE ── */}
               {inputMode === "manual" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {/* Sub-tabs */}
+                  <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid rgba(255,255,255,0.07)", paddingBottom: "8px" }}>
+                    {["paste", "upload"].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setManualMode(m)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          fontFamily: "monospace",
+                          fontSize: "10px",
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                          color: manualMode === m ? "#a78bfa" : "rgba(255,255,255,0.35)",
+                          borderBottom: manualMode === m ? "1px solid #8b5cf6" : "1px solid transparent",
+                          paddingBottom: "4px",
+                        }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
 
                   {/* Filename */}
                   <div>
@@ -472,31 +474,59 @@ export default function CodeExplorer() {
                     />
                   </div>
 
-                  {/* Code paste area */}
-                  <div>
-                    <label style={{ display: "block", fontFamily: "monospace", fontSize: "9px", letterSpacing: "0.15em", color: "rgba(255,255,255,0.35)", marginBottom: "5px", textTransform: "uppercase" }}>
-                      Code
-                    </label>
-                    <textarea
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Paste your code here…"
+                  {/* Content */}
+                  {manualMode === "paste" ? (
+                    <div>
+                      <label style={{ display: "block", fontFamily: "monospace", fontSize: "9px", letterSpacing: "0.15em", color: "rgba(255,255,255,0.35)", marginBottom: "5px", textTransform: "uppercase" }}>
+                        Code
+                      </label>
+                      <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="Paste your code here…"
+                        style={{
+                          width: "100%",
+                          height: "200px",
+                          background: "rgba(0,0,0,0.4)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          color: "#fff",
+                          fontFamily: "monospace",
+                          fontSize: "11px",
+                          padding: "8px 10px",
+                          outline: "none",
+                          resize: "none",
+                          borderRadius: "3px",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
                       style={{
-                        width: "100%",
-                        height: "200px",
-                        background: "rgba(0,0,0,0.4)",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        color: "#fff",
-                        fontFamily: "monospace",
-                        fontSize: "11px",
-                        padding: "8px 10px",
-                        outline: "none",
-                        resize: "none",
-                        borderRadius: "3px",
-                        boxSizing: "border-box",
+                        height: "120px",
+                        border: "1px dashed rgba(139,92,246,0.3)",
+                        background: "rgba(139,92,246,0.04)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        borderRadius: "4px",
+                        transition: "border-color 0.2s",
                       }}
-                    />
-                  </div>
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)")}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="1.5" style={{ marginBottom: "6px" }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>
+                        {filename ? `✓ ${filename}` : "Click to upload file"}
+                      </span>
+                      <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
