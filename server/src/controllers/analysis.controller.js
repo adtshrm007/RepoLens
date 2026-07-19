@@ -56,7 +56,7 @@ export const runAnalysis = async (req, res) => {
     const healthScores = scoringEngine.calculateScores();
 
     // 3. Trigger AI Explanation Layer
-    const aiInsights = await generateV1_5Insights(metrics, healthScores, securityFindingsList, graph);
+    const aiInsights = await generateV1_5Insights(repoName, metrics, healthScores, securityFindingsList, graph);
 
     // 4. Upsert Repository record
     let repo = await prisma.repository.findFirst({

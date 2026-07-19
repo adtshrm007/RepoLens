@@ -43,17 +43,35 @@ export const fetchRepositoryDetails = async (accessToken, owner, repo) => {
   }
 };
 
-export const fetchRepositoryTree = async (accessToken, owner, repo) => {
+export const fetchRepositoryTree = async (accessToken, owner, repo, path = "") => {
   const octokit = getOctokit(accessToken);
   try {
-    // 1. Get the default branch (e.g. main or master)
-    const { data: repoData } = await octokit.rest.repos.get({
-      owner,
-      repo,
-    });
+    if (path) {
+      // Lazy-load a specific subdirectory (used by Code Explorer folder click)
+      const { data } = await octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path,
+      });
+      const items = Array.isArray(data) ? data : [data];
+      const files = items
+        .map((item) => ({
+          name: item.name,
+          path: item.path,
+          type: item.type === 'file' ? 'file' : 'dir',
+          size: item.size || 0,
+        }))
+        .sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+      return { files };
+    }
+
+    // Full recursive tree (used by scanner and repo scan)
+    const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
     const defaultBranch = repoData.default_branch;
 
-    // 2. Fetch the recursive tree
     const { data: treeData } = await octokit.rest.git.getTree({
       owner,
       repo,
@@ -61,7 +79,6 @@ export const fetchRepositoryTree = async (accessToken, owner, repo) => {
       recursive: '1',
     });
 
-    // 3. Format the response
     const files = treeData.tree.map((item) => ({
       name: item.path.split('/').pop(),
       path: item.path,
@@ -75,7 +92,7 @@ export const fetchRepositoryTree = async (accessToken, owner, repo) => {
       err.status = 401;
       throw err;
     }
-    console.error("Error fetching repository tree recursively:", error);
+    console.error("Error fetching repository tree:", error);
     throw new Error("Failed to fetch repository tree");
   }
 };
