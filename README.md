@@ -84,10 +84,9 @@ RepoLens is powered by a backend pipeline of independent, deterministic services
   - **Architecture** (20%) — dependency structure and coupling
   - **Documentation** (10%) — comment coverage and doc presence
 
-### 5. 🤖 AI Presentation & High-Speed Explorer Layer (OpenRouter)
-- For repository metrics, raw source code is **never** sent to the LLM; a compressed deterministic JSON schema is passed instead.
-- **High-Performance Large File Engine:** For line-by-line Code Explorer (`/analysis/explore`) and multi-file scans (`/analysis/run`), RepoLens uses `@babel/parser` to deterministically extract 100% of function definitions and exact line ranges in `< 10ms`.
-- **Smart Windowing & AST Outline Injection:** Files exceeding 600 lines (or > 350 lines in scans) are windowed to their top and bottom sections while prepending the complete **AST Structural Outline** of all functions. This prevents token limit crashes, eliminates blind spots in architectural summaries, and drops AI inference latency to **~6–10 seconds**.
+### 5. 🤖 AI Presentation Layer (OpenRouter)
+- Raw source code is **never** sent to the LLM
+- A compressed deterministic JSON schema is passed instead — the LLM translates it into readable architecture summaries and onboarding guides
 
 ---
 
@@ -96,8 +95,6 @@ RepoLens is powered by a backend pipeline of independent, deterministic services
 ### 🔍 Code Explorer
 - Select any file from your connected GitHub repos and run **AI-powered line-by-line analysis**
 - Or paste code manually in the **Manual mode** for instant analysis without a repo connection
-- **Lightning-Fast Large File Handling:** Pre-extracts all functions deterministically via AST and caps notable line generation to the top 12–15 most critical lines, ensuring sub-10s analysis even on multi-thousand line files
-- **Safeguards:** Pre-flight checks automatically reject minified/bundled code (`.min.js`, `bundle.js`) and files > 1 MB
 - Tabs: **Overview**, **Functions** (per-function complexity + suggestions), **Notable Lines**, **Security**
 
 ### 📊 Intelligence Dashboard
@@ -341,7 +338,6 @@ In your GitHub Developer Settings → OAuth Apps:
 - **Top 50 Files:** To respect GitHub API rate limits, the scan pipeline analyzes only the top 50 most critical source files per scan.
 - **JS/TS Only:** The deterministic AST parser (Babel) is optimized for JavaScript and TypeScript. Other languages fall back to regex-only scanning.
 - **Shallow Security:** The security scanner catches predefined unsafe patterns (hardcoded secrets, `eval()`, dangerous DOM injections) with 100% accuracy — but cannot detect complex multi-file business logic vulnerabilities.
-- **Large & Minified Files:** To prevent server memory exhaustion and LLM timeouts, line-by-line Code Explorer safely rejects files larger than **1 MB** and minified bundles (`.min.js`). For large source files (`> 600 lines`), smart windowing + AST Structural Outline Injection is automatically applied.
 - **File Upload:** File upload in Code Explorer is currently not available. Use the **Paste** mode or connect a GitHub repo instead.
 
 ---
