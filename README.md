@@ -21,11 +21,13 @@
 ## 📖 Table of Contents
 
 - [🌐 Overview](#-overview)
-- [⚙️ Core Engines (Not Just an AI Wrapper)](#-core-engines-not-just-an-ai-wrapper)
+- [📸 Screenshots](#-screenshots)
+- [⚠️ Known Limitations](#️-known-limitations)
+- [⚙️ Core Engines (Not Just an AI Wrapper)](#️-core-engines-not-just-an-ai-wrapper)
 - [✨ Features](#-features)
 - [🛠 Tech Stack](#-tech-stack)
-- [🏗 Architecture](#-architecture)
-- [🗄 Database Schema](#-database-schema)
+- [🏗 Architecture](#️-architecture)
+- [🗄 Database Schema](#️-database-schema)
 - [📡 API Reference](#-api-reference)
 - [🚀 Getting Started](#-getting-started)
 
@@ -40,6 +42,38 @@ Unlike standard "AI Wrappers" that blindly dump source code into an LLM, RepoLen
 > ⚠️ **Note on Language Support:** Currently, the deterministic static analysis and dependency graphing engines are heavily optimized for **JavaScript and TypeScript (JS/TS)**.
 
 ---
+
+## 📸 Screenshots
+
+### 🖥️ Intelligence Dashboard
+> Aggregated health metrics, recently scanned repos, security overview, and health trend — all at a glance.
+
+![Dashboard](./screenshots/dashboard.png)
+
+---
+
+### 📁 Connected Repositories
+> Browse and manage all your GitHub repositories synced to RepoLens.
+
+![Repositories](./screenshots/repositories.png)
+
+---
+
+### 🔍 Scan Detail — Overview & Health
+> Per-scan intelligence summary with architecture breakdown, metrics, and AI-generated repository documentation.
+
+![Scan Detail](./screenshots/scan_detail.png)
+
+---
+
+### `</>` Code Explorer
+> Select any file from your repository, browse the lazy-loaded file tree, and get a line-by-line AI deep-dive with security report.
+
+![Code Explorer](./screenshots/code_explorer.png)
+
+---
+
+
 
 ## ⚠️ Known Limitations
 
