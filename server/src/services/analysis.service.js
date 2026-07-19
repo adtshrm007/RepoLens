@@ -1,54 +1,4 @@
 import axios from 'axios';
-import * as babelParser from '@babel/parser';
-import _traverse from '@babel/traverse';
-const traverse = _traverse.default || _traverse;
-
-const extractFunctionsViaAST = (content, filename = 'file.js') => {
-  if (!/\.(js|jsx|ts|tsx)$/.test(filename)) return [];
-  const functions = [];
-  try {
-    const ast = babelParser.parse(content, {
-      sourceType: 'module',
-      plugins: ['jsx', 'typescript', 'classProperties', 'decorators-legacy'],
-      errorRecovery: true
-    });
-    traverse(ast, {
-      Function: (path) => {
-        const start = path.node.loc?.start?.line || 0;
-        const end = path.node.loc?.end?.line || 0;
-        if (start <= 0 || end <= 0) return;
-        const length = end - start + 1;
-        let funcName = path.node.id?.name;
-        if (!funcName && path.parent.type === 'VariableDeclarator') {
-          funcName = path.parent.id.name;
-        }
-        if (!funcName && path.parent.type === 'ObjectProperty') {
-          funcName = path.parent.key.name || path.parent.key.value;
-        }
-        if (!funcName && path.parent.type === 'ClassMethod') {
-          funcName = path.node.key.name || path.node.key.value;
-        }
-        if (!funcName) {
-          funcName = `anonymous_line_${start}`;
-        }
-        let complexity = "LOW";
-        if (length > 50) complexity = "HIGH";
-        else if (length > 25) complexity = "MEDIUM";
-
-        functions.push({
-          name: funcName,
-          lineRange: `${start}-${end}`,
-          purpose: `Function of ${length} lines defined at lines ${start}-${end}.`,
-          complexity,
-          improvement: null
-        });
-      }
-    });
-  } catch (e) {
-    console.warn(`AST function extraction failed for ${filename}:`, e.message);
-  }
-  return functions;
-};
 
 // ---------------------------------------------------------------------------
 // Shared OpenRouter call — deduplicated from the 3 near-identical copies
@@ -363,6 +313,9 @@ Quality bar — every field must meet this standard. DO NOT USE GENERIC OR SHALL
 - "vulnerabilities[].description": 3-4 sentences — explicitly explain the vulnerability mechanism (e.g., "User input from req.body.id is passed directly into a raw SQL query without sanitization"), how an attacker would exploit it, and the worst-case impact.
 - "vulnerabilities[].recommendation": Specific fix steps with a fully corrected code example (escaped as a single line).
 
+IMPORTANT: For the "functions" array, you MUST extract and include EVERY SINGLE function defined in the file. Do not skip any function, no matter how small or trivial it seems. The user wants a complete inventory of all functions.
+IMPORTANT: For the "notableLines" array, ONLY include lines that are interesting, complex, have issues, improvements, or security concerns. Do NOT include every line — only notable ones (max 60 lines). Skip blank lines, simple imports with no issues, and trivial closing braces.
+
 Schema:
 {
   "purpose": "String - 4-6 sentence deep dive into what this file does, what business logic it implements, what it exports, and its role in the system",
@@ -416,18 +369,6 @@ ${numberedContent}
     const raw = await callOpenRouter(prompt);
     const parsed = parseModelJson(raw);
 
-    const aiFunctions = validateFunctions(parsed.functions, lines);
-    const astFunctions = extractFunctionsViaAST(content, filename);
-    let finalFunctions = aiFunctions.length > 0 ? [...aiFunctions] : [...astFunctions];
-    if (aiFunctions.length > 0 && astFunctions.length > 0) {
-      astFunctions.forEach(astFn => {
-        const exists = aiFunctions.some(aiFn => aiFn.name === astFn.name || aiFn.lineRange === astFn.lineRange);
-        if (!exists) {
-          finalFunctions.push(astFn);
-        }
-      });
-    }
-
     const securityReport = parsed.securityReport
       ? { ...parsed.securityReport, vulnerabilities: validateVulnerabilities(parsed.securityReport.vulnerabilities, lines) }
       : null;
@@ -435,7 +376,7 @@ ${numberedContent}
     return {
       purpose: parsed.purpose || "",
       architecture: parsed.architecture || "",
-      functions: finalFunctions,
+      functions: validateFunctions(parsed.functions, lines),
       notableLines: validateNotableLines(parsed.notableLines, lines),
       improvements: parsed.improvements || [],
       securityReport,
