@@ -82,18 +82,47 @@ const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
 // ---------------------------------------------------------------------------
 const parseModelJson = (raw) => {
   let rawJson = raw;
-  const match = rawJson.match(/\{[\s\S]*\}/);
-  if (match) rawJson = match[0];
+  
+  // 1. Try to extract from markdown code blocks first (common with free models)
+  const markdownMatch = rawJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (markdownMatch) {
+    rawJson = markdownMatch[1];
+  } else {
+    // 2. Fallback to finding the first { and last }
+    const startIdx = rawJson.indexOf('{');
+    const endIdx = rawJson.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      rawJson = rawJson.substring(startIdx, endIdx + 1);
+    }
+  }
+  
+  // Clean control characters
   rawJson = rawJson.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
 
   try {
     return JSON.parse(rawJson);
   } catch (e) {
-    if (e.message.includes('control character')) {
-      const repaired = rawJson.replace(/\n/g, '\\n').replace(/\t/g, '\\t');
-      return JSON.parse(repaired); // now actually re-parsed; throws naturally if still broken
+    if (e.message.includes('control character') || e.message.includes('JSON')) {
+      try {
+        const repaired = rawJson.replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+        return JSON.parse(repaired);
+      } catch (e2) {
+        console.error('Failed to parse repaired JSON. Returning safe default.', e2.message);
+      }
+    } else {
+      console.error('Failed to parse JSON. Returning safe default.', e.message);
     }
-    throw e;
+    
+    // Safe default to prevent 500 errors if the fallback model hallucinates text
+    return {
+      findings: [],
+      score: 50,
+      summary: "AI analysis completed but the model failed to format the response correctly. Please try again or use a paid model.",
+      goodPractices: [],
+      structureIssues: [],
+      improvementPriorities: [],
+      fileSummaries: []
+    };
   }
 };
 
