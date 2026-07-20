@@ -3,7 +3,7 @@ import axios from 'axios';
 // ---------------------------------------------------------------------------
 // Shared OpenRouter call — deduplicated from the 3 near-identical copies
 // ---------------------------------------------------------------------------
-const callOpenRouter = async (prompt, { json = true } = {}) => {
+const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
   const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
@@ -14,23 +14,48 @@ const callOpenRouter = async (prompt, { json = true } = {}) => {
   const body = {
     model,
     messages: [{ role: "user", content: prompt }],
-    temperature: 0.2, // lower temperature = sticks to what's actually in the code, less generic filler
-    max_tokens: 4000, // Caps the token reservation so OpenRouter doesn't block users on low credits by reserving the model's absolute maximum (16k+)
+    temperature: 0.2,
+    max_tokens: 4000,
   };
   if (json) body.response_format = { type: "json_object" };
 
-  const response = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    body,
-    {
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        body,
+        {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 120000, // 2-minute timeout — prevents Render from silently killing the request
+        }
+      );
+      return response.data.choices[0].message.content.trim();
+    } catch (err) {
+      lastError = err;
+      const status = err?.response?.status;
+      const providerErr = err?.response?.data?.error;
 
-  return response.data.choices[0].message.content.trim();
+      // Log the detailed error so it appears in Render logs
+      console.error(
+        `[OpenRouter] Attempt ${attempt + 1} failed — HTTP ${status || 'N/A'} | ` +
+        `Model: ${model} | ` +
+        `Provider: ${providerErr?.metadata?.provider_name || 'unknown'} | ` +
+        `Error: ${providerErr?.message || err.message}`
+      );
+
+      // Only retry on transient server errors (502, 503, 529 = overloaded)
+      const isTransient = [502, 503, 529].includes(status);
+      if (!isTransient || attempt === retries) break;
+
+      // Brief pause before retry
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 };
 
 // ---------------------------------------------------------------------------

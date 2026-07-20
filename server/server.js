@@ -36,6 +36,42 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// ── AI Diagnostics (no auth required — safe, no secrets exposed) ─
+app.get("/health/ai", async (req, res) => {
+  const hasKey = !!process.env.OPENROUTER_API_KEY;
+  const keyPrefix = hasKey ? process.env.OPENROUTER_API_KEY.substring(0, 12) + "..." : "NOT SET";
+  const model = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini (default)";
+
+  if (!hasKey) {
+    return res.status(500).json({ ok: false, reason: "OPENROUTER_API_KEY is not set", keyPrefix, model });
+  }
+
+  try {
+    const { default: axios } = await import("axios");
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: 'Return valid JSON: {"ping":"pong"}' }],
+        response_format: { type: "json_object" },
+        max_tokens: 20,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 15000,
+      }
+    );
+    const content = response.data?.choices?.[0]?.message?.content;
+    res.json({ ok: true, keyPrefix, model, response: content, provider: response.data?.provider });
+  } catch (err) {
+    const errData = err?.response?.data || err.message;
+    res.status(500).json({ ok: false, keyPrefix, model, error: errData });
+  }
+});
+
 // ── 404 Handler ─────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found." });
