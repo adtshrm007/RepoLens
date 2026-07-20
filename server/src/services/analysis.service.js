@@ -5,43 +5,47 @@ import axios from 'axios';
 // ---------------------------------------------------------------------------
 const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  // Default to openrouter/free — zero cost, auto-routed, supports JSON mode.
-  // Set OPENROUTER_MODEL env var to override (e.g. a paid model once credits are topped up).
-  const model = process.env.OPENROUTER_MODEL || 'openrouter/free';
+  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  // Fallback used only when the primary model returns 402 (out of credits).
+  // nvidia/nemotron-3-super-120b-a12b:free is the best quality free model available.
+  const fallbackModel = 'nvidia/nemotron-3-super-120b-a12b:free';
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not set in environment variables.");
   }
 
-  const body = {
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    max_tokens: 4000,
-  };
-  if (json) body.response_format = { type: "json_object" };
 
-  let lastError;
+  const makeRequest = async (modelToUse, maxTok = 4000) => {
+    const body = {
+      model: modelToUse,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      max_tokens: maxTok,
+    };
+    if (json) body.response_format = { type: "json_object" };
+
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      body,
+      {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 120000,
+      }
+    );
+    return response.data.choices[0].message.content.trim();
+  };
+
+  // Primary attempt with the configured model
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        body,
-        {
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          timeout: 120000, // 2-minute timeout — prevents Render from silently killing the request
-        }
-      );
-      return response.data.choices[0].message.content.trim();
+      return await makeRequest(model);
     } catch (err) {
-      lastError = err;
       const status = err?.response?.status;
       const providerErr = err?.response?.data?.error;
 
-      // Log the detailed error so it appears in Render logs
       console.error(
         `[OpenRouter] Attempt ${attempt + 1} failed — HTTP ${status || 'N/A'} | ` +
         `Model: ${model} | ` +
@@ -49,15 +53,27 @@ const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
         `Error: ${providerErr?.message || err.message}`
       );
 
-      // Only retry on transient server errors (502, 503, 529 = overloaded)
-      const isTransient = [502, 503, 529].includes(status);
-      if (!isTransient || attempt === retries) break;
+      // 402 = out of credits — switch to the free fallback model immediately
+      if (status === 402) {
+        console.warn(`[OpenRouter] Credits exhausted on ${model}. Falling back to ${fallbackModel}.`);
+        try {
+          // Free models have lower token limits, cap at 2000
+          return await makeRequest(fallbackModel, 2000);
+        } catch (fallbackErr) {
+          const fbStatus = fallbackErr?.response?.status;
+          const fbErr = fallbackErr?.response?.data?.error;
+          console.error(`[OpenRouter] Fallback also failed — HTTP ${fbStatus} | Error: ${fbErr?.message || fallbackErr.message}`);
+          throw fallbackErr;
+        }
+      }
 
-      // Brief pause before retry
+      // Retry only on transient server errors (502, 503, 529 = overloaded)
+      const isTransient = [502, 503, 529].includes(status);
+      if (!isTransient || attempt === retries) throw err;
+
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
   }
-  throw lastError;
 };
 
 // ---------------------------------------------------------------------------
