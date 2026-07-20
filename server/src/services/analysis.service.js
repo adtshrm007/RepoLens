@@ -5,7 +5,9 @@ import axios from 'axios';
 // ---------------------------------------------------------------------------
 const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  // Default to openrouter/free — zero cost, auto-routed, supports JSON mode.
+  // Set OPENROUTER_MODEL env var to override (e.g. a paid model once credits are topped up).
+  const model = process.env.OPENROUTER_MODEL || 'openrouter/free';
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not set in environment variables.");

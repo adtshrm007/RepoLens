@@ -40,7 +40,7 @@ app.get("/health", (req, res) => {
 app.get("/health/ai", async (req, res) => {
   const hasKey = !!process.env.OPENROUTER_API_KEY;
   const keyPrefix = hasKey ? process.env.OPENROUTER_API_KEY.substring(0, 12) + "..." : "NOT SET";
-  const model = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini (default)";
+  const model = process.env.OPENROUTER_MODEL || "openrouter/free";
 
   if (!hasKey) {
     return res.status(500).json({ ok: false, reason: "OPENROUTER_API_KEY is not set", keyPrefix, model });
