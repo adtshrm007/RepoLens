@@ -15,7 +15,7 @@ const callOpenRouter = async (prompt, { json = true, retries = 1 } = {}) => {
   }
 
 
-  const makeRequest = async (modelToUse, maxTok = 4000) => {
+  const makeRequest = async (modelToUse, maxTok = 2500) => {
     const body = {
       model: modelToUse,
       messages: [{ role: "user", content: prompt }],
