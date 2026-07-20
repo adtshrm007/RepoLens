@@ -23,7 +23,7 @@ export default function ManualAnalysisModal({ isOpen, onClose }) {
     try {
       const { data } = await api.post("/analysis/manual", { filename, content });
       onClose();
-      navigate(`/analysis/${data.analysis.id}`);
+      navigate(`/scan/${data.analysis.id}`);
     } catch (err) {
       setError(err?.response?.data?.message || "Analysis failed.");
     } finally {
