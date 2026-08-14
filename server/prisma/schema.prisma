@@ -82,6 +82,7 @@ model RepositoryScan {
 
   files            RepositoryFile[]
   securityFindings SecurityFinding[]
+  findings         Finding[]
   healthScore      HealthScore?
   architecture     ArchitectureModel?
   onboardingGuide  OnboardingGuide?
@@ -119,15 +120,21 @@ model FileMetrics {
   fileId String @unique
   file   RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
-  linesOfCode       Int
-  functionCount     Int
-  componentCount    Int
-  hookUsage         Int
-  avgFunctionLength Float
-  largestFunction   Int
-  nestingDepth      Int
-  dependencyCount   Int
-  deadCodeIndicators Int @default(0)
+  linesOfCode          Int
+  functionCount        Int
+  componentCount       Int
+  hookUsage            Int
+  avgFunctionLength    Float
+  largestFunction      Int
+  nestingDepth         Int
+  dependencyCount      Int
+  deadCodeIndicators   Int   @default(0)
+
+  // Tree-sitter complexity metrics
+  cyclomaticComplexity Float @default(0)
+  cognitiveComplexity  Float @default(0)
+  duplicateCodeBlocks  Int   @default(0)
+  contentHash          String?
 }
 
 model SecurityFinding {
@@ -151,8 +158,11 @@ model DependencyGraph {
   scanId String @unique
   scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
-  nodes Json
-  edges Json
+  nodes    Json
+  edges    Json
+  cycles   Json?    // circular dependency cycles detected by DependencyAnalyzer
+  hotspots Json?    // top 5 highest fan-in files
+  metrics  Json?    // { totalNodes, totalEdges, circularCount, maxFanIn, maxFanOut }
 }
 
 model HealthScore {
@@ -211,4 +221,25 @@ model FileDocumentation {
   user   User   @relation(fields: [userId], references: [id])
 
   @@unique([userId, repoFullName, filePath])
+}
+
+// RuleEngine output — one record per finding per scan
+model Finding {
+  id String @id @default(cuid())
+
+  scanId String
+  scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  ruleId         String
+  severity       String  // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+  category       String  // "COMPLEXITY" | "DEPENDENCY" | "MAINTAINABILITY" | "ARCHITECTURE"
+  file           String
+  line           Int
+  symbol         String?
+  message        String
+  explanation    String
+  metrics        Json?
+  recommendation String
+
+  createdAt DateTime @default(now())
 }
