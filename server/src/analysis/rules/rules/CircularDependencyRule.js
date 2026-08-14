@@ -1,9 +1,13 @@
 /**
  * CircularDependencyRule
- * Triggers for every circular dependency cycle found in the dependency graph.
  *
- * Short cycles (2–3 files) are HIGH.
- * Longer cycles (4+ files) are MEDIUM (harder to detect, may be intentional).
+ * Triggers for every circular dependency cycle found in the dependency graph.
+ * Category: ARCHITECTURE
+ *
+ * Severity:
+ *   2-file cycle  HIGH    — direct mutual coupling, must be resolved
+ *   3-file cycle  MEDIUM  — indirect circular loop
+ *   4+ file cycle LOW     — longer chains, may be partially intentional
  */
 export class CircularDependencyRule {
   get id() { return 'CIRCULAR_DEPENDENCY'; }
@@ -12,20 +16,26 @@ export class CircularDependencyRule {
     if (!graphResult?.cycles?.length) return [];
 
     return graphResult.cycles.map(cycle => {
-      const severity = cycle.length <= 3 ? 'HIGH' : 'MEDIUM';
+      const severity = cycle.length <= 2 ? 'HIGH' : cycle.length <= 3 ? 'MEDIUM' : 'LOW';
       const cycleStr = cycle.join(' → ');
 
       return {
-        ruleId:     this.id,
+        ruleId:      this.id,
         severity,
-        category:   'DEPENDENCY',
-        file:       cycle[0],
-        line:       1,
-        symbol:     null,
-        message:    `Circular dependency: ${cycleStr}`,
-        explanation: `A circular dependency means module A depends on B which depends back on A (possibly through other modules). This creates tight coupling, makes modules impossible to load independently, and causes issues with testing and tree-shaking.`,
-        metrics:    { cycleLength: cycle.length, cycle },
-        recommendation: 'Extract shared logic into a third module that both can import without creating a cycle. Review whether both modules truly need each other or if their responsibilities overlap.',
+        category:    'ARCHITECTURE',
+        confidence:  'HIGH',
+        file:        cycle[0],
+        startLine:   1,
+        endLine:     1,
+        line:        1,
+        symbol:      null,
+        message:     `Circular dependency detected: ${cycleStr}`,
+        explanation: `A circular dependency exists between ${cycle.length} module(s): ${cycleStr}. ` +
+          `This creates tight coupling, prevents independent module loading, and breaks tree-shaking.`,
+        evidence:    cycleStr,
+        metrics:     { cycleLength: cycle.length, cycle },
+        recommendation: `Extract the shared logic between ${cycle[0]} and ${cycle[cycle.length - 2]} ` +
+          `into a third module that both can import. Review whether all modules in the cycle truly need each other.`,
       };
     });
   }
