@@ -150,6 +150,10 @@ model SecurityFinding {
   snippet     String
   description String
   recommendation String?
+
+  cwe         Json?
+  cve         String?
+  cvss        Float?
 }
 
 model DependencyGraph {
@@ -176,6 +180,12 @@ model HealthScore {
   architecture    Int
   documentation   Int
   overall         Int
+
+  // Standalone security score (0-100) — separate from the health security subscore
+  // Computed by SecurityScoringEngine with full deduction breakdown
+  securityScore     Int?  @default(100)
+  securityGrade     String? @default("A")
+  securityBreakdown Json? // { deductions: [...], breakdown: {...} }
 }
 
 model ArchitectureModel {
@@ -224,6 +234,10 @@ model FileDocumentation {
 }
 
 // RuleEngine output — one record per finding per scan
+// Categories: SECURITY | DEPENDENCY | COMPLEXITY | CODE_QUALITY | ARCHITECTURE
+// Severity (SECURITY/DEPENDENCY): CRITICAL | HIGH | MEDIUM | LOW
+// Severity (COMPLEXITY):          VERY_HIGH | HIGH | MODERATE | LOW
+// Severity (CODE_QUALITY/ARCHITECTURE): HIGH | MEDIUM | LOW
 model Finding {
   id String @id @default(cuid())
 
@@ -231,15 +245,23 @@ model Finding {
   scan   RepositoryScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
   ruleId         String
-  severity       String  // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
-  category       String  // "COMPLEXITY" | "DEPENDENCY" | "MAINTAINABILITY" | "ARCHITECTURE"
+  severity       String  // category-scoped severity label
+  category       String  // "SECURITY" | "DEPENDENCY" | "COMPLEXITY" | "CODE_QUALITY" | "ARCHITECTURE"
+  confidence     String  @default("HIGH") // "HIGH" | "MEDIUM" | "LOW"
   file           String
-  line           Int
+  line           Int     // alias for startLine — kept for backward compat
+  startLine      Int     @default(0)
+  endLine        Int     @default(0)
   symbol         String?
   message        String
   explanation    String
+  evidence       String?
   metrics        Json?
   recommendation String
+
+  cwe            Json?
+  cve            String?
+  cvss           Float?
 
   createdAt DateTime @default(now())
 }
