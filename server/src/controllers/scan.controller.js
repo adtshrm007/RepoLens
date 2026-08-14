@@ -75,35 +75,38 @@ export const getScanFullPayload = async (req, res) => {
     const scan = await prisma.repositoryScan.findUnique({
       where: { id },
       include: {
-        repository: true,
-        healthScore: true,
-        architecture: true,
+        repository:      true,
+        healthScore:     true,
+        architecture:    true,
         onboardingGuide: true,
         dependencyGraph: true,
-        securityFindings: true
+        securityFindings: true,
+        findings:        { orderBy: { severity: 'asc' } },
       }
     });
 
-    if (!scan) return res.status(404).json({ message: "Scan not found" });
+    if (!scan) return res.status(404).json({ message: 'Scan not found' });
 
-    // Also fetch aggregated metrics manually since they are now on the file level
-    // We can do a quick aggregation or just fetch the Top files
+    // Aggregate file-level metrics from the DB
     const metrics = await prisma.fileMetrics.aggregate({
       where: { file: { scanId: id } },
       _sum: {
-        linesOfCode: true,
-        functionCount: true,
-        componentCount: true,
-        hookUsage: true,
-        dependencyCount: true,
-        deadCodeIndicators: true
+        linesOfCode:          true,
+        functionCount:        true,
+        componentCount:       true,
+        hookUsage:            true,
+        dependencyCount:      true,
+        deadCodeIndicators:   true,
+        duplicateCodeBlocks:  true,
       },
       _avg: {
-        avgFunctionLength: true
+        avgFunctionLength:    true,
+        cyclomaticComplexity: true,
+        cognitiveComplexity:  true,
       },
       _max: {
         largestFunction: true,
-        nestingDepth: true
+        nestingDepth:    true,
       }
     });
 
@@ -112,23 +115,29 @@ export const getScanFullPayload = async (req, res) => {
     });
 
     const aggregatedMetrics = {
-      totalLines: metrics._sum.linesOfCode || 0,
-      fileCount: scan.analyzedFiles || 0,
-      functionCount: metrics._sum.functionCount || 0,
-      componentCount: metrics._sum.componentCount || 0,
-      avgFunctionLength: metrics._avg.avgFunctionLength || 0,
-      largestFunction: metrics._max.largestFunction || 0,
-      maxNestingDepth: metrics._max.nestingDepth || 0,
-      deadCodeIndicators: metrics._sum.deadCodeIndicators || 0,
-      largeFilesCount: largeFilesCount || 0,
+      totalLines:              metrics._sum.linesOfCode          || 0,
+      fileCount:               scan.analyzedFiles                || 0,
+      functionCount:           metrics._sum.functionCount        || 0,
+      componentCount:          metrics._sum.componentCount       || 0,
+      hookUsageCount:          metrics._sum.hookUsage            || 0,
+      avgFunctionLength:       metrics._avg.avgFunctionLength    || 0,
+      largestFunction:         metrics._max.largestFunction      || 0,
+      maxNestingDepth:         metrics._max.nestingDepth         || 0,
+      deadCodeIndicators:      metrics._sum.deadCodeIndicators   || 0,
+      largeFilesCount:         largeFilesCount                   || 0,
+      dependencyCount:         metrics._sum.dependencyCount      || 0,
+      duplicateCodeBlocks:     metrics._sum.duplicateCodeBlocks  || 0,
+      // New complexity metrics from tree-sitter
+      avgCyclomaticComplexity: metrics._avg.cyclomaticComplexity || 0,
+      avgCognitiveComplexity:  metrics._avg.cognitiveComplexity  || 0,
     };
 
     res.json({
       ...scan,
-      metrics: aggregatedMetrics
+      metrics: aggregatedMetrics,
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 

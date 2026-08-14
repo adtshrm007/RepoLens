@@ -777,3 +777,20 @@ export const globalSearch = async (req, res) => {
     res.status(500).json({ message: 'Search failed' });
   }
 };
+
+// @desc  Get latest RuleEngine findings for a repository
+// @route GET /analysis/repo/:repoId/latest/findings
+// @access Private
+export const getLatestFindings = async (req, res) => {
+  try {
+    const scan = await prisma.repositoryScan.findFirst({
+      where: { repositoryId: req.params.repoId, status: 'COMPLETED' },
+      orderBy: { completedAt: 'desc' },
+      include: { findings: { orderBy: [{ severity: 'asc' }, { category: 'asc' }] } }
+    });
+    if (!scan) return res.status(404).json({ message: 'No completed scan found' });
+    res.json({ findings: scan.findings, scanId: scan.id });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
