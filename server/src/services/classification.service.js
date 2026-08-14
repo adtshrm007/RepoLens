@@ -9,16 +9,32 @@ export class ClassificationService {
 
   isIgnored(filePath) {
     if (!filePath) return true;
+
+    // ── Always block directory/artifact patterns ─────────────────────
     for (const pattern of this.ignorePatterns) {
-      if (filePath.includes(pattern)) {
-        return true;
-      }
+      if (filePath.includes(pattern)) return true;
     }
-    // Ignore non-source files
-    if (filePath.endsWith('.min.js') || filePath.endsWith('.map') || filePath.endsWith('.svg') || filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.json') || filePath.endsWith('.md')) {
+
+    // ── Block build/lock artifacts ───────────────────────────────────
+    if (
+      filePath.endsWith('.min.js') ||
+      filePath.endsWith('.map') ||
+      filePath.endsWith('package-lock.json') ||
+      filePath.endsWith('yarn.lock') ||
+      filePath.endsWith('pnpm-lock.yaml')
+    ) {
       return true;
     }
-    return false;
+
+    // ── Whitelist: only pass through logic-containing files ──────────
+    // Everything not in this list (css, env, yml, yaml, json, md,
+    // svg, png, jpg, scss, graphql, etc.) is blocked.
+    const LOGIC_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
+    const ext = filePath.includes('.')
+      ? '.' + filePath.split('.').pop().toLowerCase()
+      : '';
+
+    return !LOGIC_EXTENSIONS.has(ext);
   }
 
   classify(filePath, fileName) {

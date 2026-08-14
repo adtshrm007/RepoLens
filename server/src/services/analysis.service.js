@@ -323,29 +323,60 @@ Files to analyze:
 // V1.5 Architecture: AI Explanation Layer
 // ---------------------------------------------------------------------------
 
-export const generateV1_5Insights = async (repoName, metrics, health, security, graph) => {
-  const prompt = `You are an expert software architect. Analyze the following deterministic metrics, repository structure, and security findings to generate an onboarding guide and comprehensive documentation for the repository "${repoName}".
-  
-Repository Structure (Dependency Graph):
-${JSON.stringify(graph, null, 2)}
+export const generateV1_5Insights = async (repoName, metrics, health, security, graph, findings = []) => {
+  // Build a compact findings summary (top 10 most severe) to keep prompt size manageable
+  const findingSummary = (findings || [])
+    .slice(0, 10)
+    .map(f => `[${f.severity}] ${f.ruleId} in ${f.file?.split('/').pop() || 'unknown'}:${f.lineNumber || f.line} — ${f.message}`)
+    .join('\n');
+
+  // Circular dependencies from graph
+  const circularDeps = (graph?.cycles || []).slice(0, 5)
+    .map(cycle => Array.isArray(cycle) ? cycle.join(' → ') : String(cycle))
+    .join('\n');
+
+  const prompt = `You are an expert software architect analyzing the repository "${repoName}".
+
+DETERMINISTIC ANALYSIS RESULTS:
 
 Repository Metrics:
-${JSON.stringify(metrics, null, 2)}
+${JSON.stringify({
+  totalLines: metrics.totalLines,
+  fileCount: metrics.fileCount,
+  functionCount: metrics.totalFunctions || metrics.functionCount,
+  avgCyclomaticComplexity: metrics.avgCyclomaticComplexity?.toFixed(2),
+  avgCognitiveComplexity: metrics.avgCognitiveComplexity?.toFixed(2),
+  maxNestingDepth: metrics.maxNestingDepth,
+  largeFilesCount: metrics.largeFilesCount,
+  largeFunctionsCount: metrics.largeFunctionsCount,
+  componentCount: metrics.componentCount,
+  hookUsageCount: metrics.hookUsageCount,
+}, null, 2)}
 
-Health Scores:
+Health Scores (0-100):
 ${JSON.stringify(health, null, 2)}
 
-Security Findings:
-${JSON.stringify(security, null, 2)}
+Top Code Quality Findings (from static rule engine):
+${findingSummary || 'None detected.'}
 
-Output strictly valid JSON with this schema:
+Security Findings (${security.length} total):
+${JSON.stringify(security.slice(0, 5), null, 2)}
+
+Dependency Graph Summary:
+- Total files: ${graph?.metrics?.totalNodes ?? graph?.nodes?.length ?? 0}
+- Total imports: ${graph?.metrics?.totalEdges ?? graph?.edges?.length ?? 0}
+- Circular dependencies: ${graph?.cycles?.length ?? 0}
+${circularDeps ? 'Cycles:\n' + circularDeps : ''}
+- Hotspot files (most imported): ${(graph?.hotspots || []).slice(0, 3).map(h => h.label || h.path?.split('/').pop()).join(', ') || 'N/A'}
+
+Output strictly valid JSON matching this schema:
 {
   "onboardingGuide": {
-    "content": "String (Markdown formatted text explaining the repository architecture and flow)",
-    "entryPoints": ["String (array of key file paths to start reading)"],
-    "moduleFlow": ["String (array of step-by-step learning modules)"]
+    "content": "String (Markdown) — explain the repository architecture, key modules, and how to navigate the codebase",
+    "entryPoints": ["String — key file paths to start reading"],
+    "moduleFlow": ["String — step-by-step learning path for a new developer"]
   },
-  "summary": "String (Markdown formatted. Write a comprehensive documentation of the repository. Explain exactly what the repository does, how it works under the hood, its core architecture, and other necessary details to fully understand the project based on the provided metrics and file data. DO NOT use generic placeholders like '[insert project purpose here]'. Infer the actual purpose from the repository name and the file paths.)"
+  "summary": "String (Markdown) — comprehensive documentation. Explain exactly what this repository does, its core architecture, how the main modules interact, what the most important technical challenges are, and what specific areas need improvement based on the metrics and findings. Be specific — reference actual file names, metric values, and findings."
 }
 `;
 
@@ -353,10 +384,10 @@ Output strictly valid JSON with this schema:
     const rawResult = await callOpenRouter(prompt);
     return parseModelJson(rawResult);
   } catch (error) {
-    console.error("V1.5 AI Generation Failed:", error);
+    console.error('V1.5 AI Generation Failed:', error);
     return {
-      onboardingGuide: { content: "Failed to generate guide.", entryPoints: [], moduleFlow: [] },
-      summary: "Analysis complete, but AI explanation failed."
+      onboardingGuide: { content: 'Failed to generate guide.', entryPoints: [], moduleFlow: [] },
+      summary: 'Analysis complete, but AI explanation failed.',
     };
   }
 };

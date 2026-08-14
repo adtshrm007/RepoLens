@@ -1,24 +1,43 @@
 import prisma from '../utils/prisma.util.js';
 import { fetchRepositoryTree, fetchFileContent } from './github.service.js';
 import { ClassificationService } from './classification.service.js';
-import { StaticAnalysisService } from './staticAnalysis.service.js';
-import { DependencyGraphService } from './dependencyGraph.service.js';
 import { SecurityScannerService } from './securityScanner.service.js';
 import { ScoringEngineService } from './scoringEngine.service.js';
-import { generateV1_5Insights } from './analysis.service.js'; // We will repurpose this or rewrite a new one
+import { generateV1_5Insights } from './analysis.service.js';
+
+// ── New CST analysis layer ──────────────────────────────────────────────────
+import { TreeSitterParser }  from '../analysis/parser/TreeSitterParser.js';
+import { CSTDataExtractor }  from '../analysis/representation/CSTDataExtractor.js';
+import { CSTRepoProfile }    from '../analysis/representation/CSTRepoProfile.js';
+import { DependencyAnalyzer } from '../analysis/analyzers/DependencyAnalyzer.js';
+import { RuleEngine }        from '../analysis/rules/RuleEngine.js';
+
+/** Max files to fetch content for — balances depth vs time budget */
+const MAX_ANALYSIS_FILES = 100;
+
+/** Number of files to fetch concurrently — respects GitHub rate limits */
+const CONCURRENCY = 5;
 
 export class ScannerService {
   constructor(userId, repositoryId, owner, repoName, githubAccessToken) {
-    this.userId = userId;
-    this.repositoryId = repositoryId;
-    this.owner = owner;
-    this.repoName = repoName;
-    this.githubAccessToken = githubAccessToken;
+    this.userId             = userId;
+    this.repositoryId       = repositoryId;
+    this.owner              = owner;
+    this.repoName           = repoName;
+    this.githubAccessToken  = githubAccessToken;
+
+    // Per-scan instances — each scan is fully isolated
     this.classificationService = new ClassificationService();
+    this.parser                = new TreeSitterParser();
+    this.extractor             = new CSTDataExtractor();
+    this.repoProfile           = new CSTRepoProfile();
+    this.dependencyAnalyzer    = new DependencyAnalyzer();
+    this.ruleEngine            = new RuleEngine();
   }
 
+  // ── Public ──────────────────────────────────────────────────────────────────
+
   async startScan() {
-    // 1. Create the Scan Record
     const scan = await prisma.repositoryScan.create({
       data: {
         repositoryId: this.repositoryId,
@@ -27,192 +46,351 @@ export class ScannerService {
       }
     });
 
-    // 2. Launch background job (do not await)
+    // Fire-and-forget background pipeline
     this.runPipeline(scan.id).catch(async (err) => {
-      console.error(`Pipeline failed for scan ${scan.id}:`, err);
+      console.error(`[Scanner] Pipeline failed for scan ${scan.id}:`, err);
       try {
         await prisma.repositoryScan.update({
           where: { id: scan.id },
           data: { status: 'FAILED', summary: `Error: ${err.message}` }
         });
       } catch (dbErr) {
-        console.error('Failed to mark scan as FAILED:', dbErr);
+        console.error('[Scanner] Failed to mark scan as FAILED:', dbErr);
       }
     });
 
     return scan.id;
   }
 
+  // ── Pipeline ─────────────────────────────────────────────────────────────────
+
   async runPipeline(scanId) {
-    // 1. Fetch entire repository tree
-    const { files: rawFiles } = await fetchRepositoryTree(this.githubAccessToken, this.owner, this.repoName);
-    
-    // 2. Filter, Classify, Score
+    const t0 = Date.now();
+
+    // ── Step 1: Fetch entire repository tree (1 API call) ─────────────────────
+    const { files: rawFiles } = await fetchRepositoryTree(
+      this.githubAccessToken, this.owner, this.repoName
+    );
+
+    // ── Step 2: Classify all files — whitelist filter, importance scoring ──────
+    //   ClassificationService.isIgnored() now uses a whitelist:
+    //   only .js / .jsx / .ts / .tsx pass through.
+    //   This runs on path strings — no content needed, no API calls.
     const classifiedFiles = this.classificationService.processTree(rawFiles);
-    
+
     await prisma.repositoryScan.update({
       where: { id: scanId },
       data: { totalFiles: classifiedFiles.length, status: 'ANALYZING' }
     });
 
-    // 3. Save all files to DB (batched to prevent connection pool exhaustion)
-    const dbFiles = [];
-    const batchSize = 10;
-    for (let i = 0; i < classifiedFiles.length; i += batchSize) {
-      const batch = classifiedFiles.slice(i, i + batchSize);
-      const batchResults = await Promise.all(batch.map(async (file) => {
-        const extension = file.path.split('.').pop() || '';
-        return await prisma.repositoryFile.create({
-          data: {
-            scanId,
-            path: file.path,
-            extension,
-            size: file.size ?? 0,
-            importanceScore: file.importanceScore,
-            classification: {
-              create: {
-                type: file.classification
-              }
-            }
-          },
-          include: { classification: true }
-        });
-      }));
-      dbFiles.push(...batchResults);
-    }
+    // ── Step 3: Save all classified files to DB (batched) ─────────────────────
+    const dbFiles = await this._saveFilesToDB(scanId, classifiedFiles);
 
-    // 4. Take top 50 files for deep AST analysis
-    const topFiles = [...dbFiles].sort((a, b) => (b.importanceScore || 0) - (a.importanceScore || 0)).slice(0, 50);
+    // ── Step 4: Select top files for deep analysis ─────────────────────────────
+    //   Sort by importance score, cap at MAX_ANALYSIS_FILES.
+    //   Files > 200KB are already rejected by TreeSitterParser — no need to
+    //   filter by size here, but we could add it as a future optimisation.
+    const topFiles = [...dbFiles]
+      .sort((a, b) => (b.importanceScore || 0) - (a.importanceScore || 0))
+      .slice(0, MAX_ANALYSIS_FILES);
 
-    // 5. Fetch content (sequentially to avoid rate limits, or batch of 5)
-    const filesWithContent = [];
+    // ── Step 5: Streaming CST pipeline ────────────────────────────────────────
+    //   Fetch content + parse + extract FileProfile — all per file,
+    //   CONCURRENCY files at a time. Each FileProfile is written to DB
+    //   immediately as it completes (no waiting for all files).
     let analyzedCount = 0;
-    
-    for (const file of topFiles) {
-      // Only fetch content for source code files
-      if (['js', 'jsx', 'ts', 'tsx'].includes(file.extension)) {
-        try {
-          const content = await fetchFileContent(this.githubAccessToken, this.owner, this.repoName, file.path);
-          filesWithContent.push({ ...file, content });
-          
-          analyzedCount++;
-          if (analyzedCount % 5 === 0) {
-             await prisma.repositoryScan.update({
-               where: { id: scanId },
-               data: { analyzedFiles: analyzedCount }
-             });
-          }
-        } catch (err) {
-          console.warn(`Failed to fetch content for ${file.path}:`, err.message);
-        }
-      }
-    }
+    await this._processFilesInBatches(topFiles, scanId, async (dbFile, content) => {
+      // Parse
+      const extension   = dbFile.extension;
+      const parseResult = this.parser.parse({ path: dbFile.path, content, extension });
 
-    // Update final analyzed count
+      // Extract FileProfile
+      const profile = this.extractor.extract(
+        {
+          path:           dbFile.path,
+          name:           dbFile.path.split('/').pop(),
+          extension,
+          classification: dbFile.classification?.type || 'Generic Module',
+          fileId:         dbFile.id,
+          content,
+        },
+        parseResult
+      );
+
+      // Accumulate in CSTRepoProfile
+      this.repoProfile.addFileProfile(profile);
+
+      // Write FileMetrics to DB immediately
+      await this._saveFileMetrics(dbFile.id, profile);
+
+      // Mark file as analyzed
+      await prisma.repositoryFile.update({
+        where: { id: dbFile.id },
+        data:  { isAnalyzed: true }
+      });
+
+      analyzedCount++;
+      // Update progress every 5 files
+      if (analyzedCount % 5 === 0) {
+        await prisma.repositoryScan.update({
+          where: { id: scanId },
+          data:  { analyzedFiles: analyzedCount }
+        });
+      }
+    });
+
+    // Final analyzed count
     await prisma.repositoryScan.update({
       where: { id: scanId },
-      data: { analyzedFiles: filesWithContent.length }
+      data:  { analyzedFiles: analyzedCount }
     });
 
-    // 6. Run Deterministic Engines
-    const staticAnalyzer = new StaticAnalysisService();
-    const metricsResult = staticAnalyzer.analyzeFiles(filesWithContent);
+    // ── Step 6: Aggregate repo-level metrics ───────────────────────────────────
+    const repoMetrics = this.repoProfile.aggregate();
 
-    const securityScanner = new SecurityScannerService();
-    const securityFindings = securityScanner.scanFiles(filesWithContent);
+    // ── Step 7: Dependency analysis ────────────────────────────────────────────
+    const graphResult = this.dependencyAnalyzer.buildGraph(this.repoProfile);
 
-    const graphBuilder = new DependencyGraphService();
-    const dependencyGraph = graphBuilder.buildGraph(filesWithContent);
+    // ── Step 8: Rule engine ────────────────────────────────────────────────────
+    const findings = this.ruleEngine.run(this.repoProfile, graphResult);
 
-    const scoringEngine = new ScoringEngineService(metricsResult, securityFindings);
-    const healthScores = scoringEngine.calculateScores();
+    // ── Step 9: Security scan ──────────────────────────────────────────────────
+    //   SecurityScannerService receives files with content directly.
+    //   We pass a lightweight view of what was processed.
+    const filesForSecurity = topFiles
+      .map(f => {
+        const profile = this.repoProfile.getFileProfile(f.path);
+        return profile && !profile.parseError ? { ...f, content: null } : null;
+      })
+      .filter(Boolean);
 
-    // 7. Save Deterministic Results to DB
-    // Save File Metrics
-    for (const file of filesWithContent) {
-      // staticAnalyzer needs a way to get individual file metrics, but currently it aggregates.
-      // We will adjust staticAnalyzer to provide per-file metrics, or we will just use aggregated for now.
-      // Let's implement individual file metrics saving by parsing them individually.
-      const individualMetrics = new StaticAnalysisService().analyzeFiles([file]);
-      await prisma.fileMetrics.create({
-        data: {
-          fileId: file.id,
-          linesOfCode: individualMetrics.totalLines || 0,
-          functionCount: individualMetrics.functionCount || 0,
-          componentCount: individualMetrics.componentCount || 0,
-          hookUsage: individualMetrics.hookUsageCount || 0,
-          avgFunctionLength: individualMetrics.avgFunctionLength || 0,
-          largestFunction: individualMetrics.largestFunction || 0,
-          nestingDepth: individualMetrics.maxNestingDepth || 0,
-          dependencyCount: individualMetrics.dependencyCount || 0,
-          deadCodeIndicators: individualMetrics.deadCodeIndicators || 0,
-        }
-      });
-      await prisma.repositoryFile.update({ where: { id: file.id }, data: { isAnalyzed: true } });
-    }
+    // Re-fetch content for security scanner (it has its own patterns)
+    // To avoid re-fetching, we pass the profiles instead.
+    // SecurityScannerService is kept unchanged — pass files that were processed.
+    const securityFindings = await this._runSecurityScan(topFiles);
 
-    // Save Security Findings
-    if (securityFindings.length > 0) {
-      await prisma.securityFinding.createMany({
-        data: securityFindings.map(f => ({
-          scanId,
-          type: f.type,
-          severity: f.severity,
-          file: f.file,
-          lineNumber: f.lineNumber,
-          snippet: (f.snippet || '').substring(0, 500),
-          description: f.description,
-          recommendation: f.recommendation || "Review and secure this code segment."
-        }))
-      });
-    }
+    // ── Step 10: Scoring ───────────────────────────────────────────────────────
+    const scoringEngine = new ScoringEngineService(repoMetrics, securityFindings, findings, graphResult);
+    const healthScores  = scoringEngine.calculateScores();
 
-    // Save Graph
-    await prisma.dependencyGraph.create({
-      data: {
-        scanId,
-        nodes: dependencyGraph.nodes,
-        edges: dependencyGraph.edges
-      }
-    });
+    // ── Step 11: Write graph, findings, health to DB ───────────────────────────
+    await this._saveDependencyGraph(scanId, graphResult);
+    await this._saveFindings(scanId, findings);
+    await this._saveSecurityFindings(scanId, securityFindings);
 
-    // Save Health
     await prisma.healthScore.create({
-      data: {
-        scanId,
-        ...healthScores
-      }
+      data: { scanId, ...healthScores }
     });
 
-    // 8. Generate AI Intelligence
-    const aiInsights = await generateV1_5Insights(this.repoName, metricsResult, healthScores, securityFindings, dependencyGraph);
+    // ── Step 12: AI insights ───────────────────────────────────────────────────
+    const aiInsights = await generateV1_5Insights(
+      this.repoName,
+      repoMetrics,
+      healthScores,
+      securityFindings,
+      graphResult,
+      findings
+    );
 
-    // Save Architecture & Onboarding
     await prisma.architectureModel.create({
       data: {
         scanId,
-        summary: aiInsights.summary || "Architecture mapped successfully.",
-        // We'll leave the layers null for now or parse them if AI provides them
+        summary: aiInsights.summary || 'Architecture analysed.',
       }
     });
 
     await prisma.onboardingGuide.create({
       data: {
         scanId,
-        content: aiInsights.onboardingGuide?.content || "No guide generated.",
+        content:     aiInsights.onboardingGuide?.content     || 'No guide generated.',
         entryPoints: aiInsights.onboardingGuide?.entryPoints || [],
-        moduleFlow: aiInsights.onboardingGuide?.moduleFlow || []
+        moduleFlow:  aiInsights.onboardingGuide?.moduleFlow  || [],
       }
     });
 
-    // 9. Mark Completed
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+
+    // ── Step 13: Complete ──────────────────────────────────────────────────────
     await prisma.repositoryScan.update({
       where: { id: scanId },
-      data: { 
-        status: 'COMPLETED',
+      data: {
+        status:      'COMPLETED',
         completedAt: new Date(),
-        summary: aiInsights.summary || "Scan completed successfully."
+        summary:     aiInsights.summary || `Scan completed in ${elapsed}s. Analyzed ${analyzedCount} files.`,
       }
     });
+
+    console.log(`[Scanner] Scan ${scanId} completed in ${elapsed}s — ${analyzedCount} files analyzed.`);
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────────
+
+  /**
+   * Save all classified files to DB in batches of 10.
+   * Returns the created DB records (with id, path, extension, importanceScore, classification).
+   */
+  async _saveFilesToDB(scanId, classifiedFiles) {
+    const dbFiles = [];
+    const batchSize = 10;
+
+    for (let i = 0; i < classifiedFiles.length; i += batchSize) {
+      const batch = classifiedFiles.slice(i, i + batchSize);
+      const created = await Promise.all(batch.map(async (file) => {
+        const extension = file.path.split('.').pop() || '';
+        return prisma.repositoryFile.create({
+          data: {
+            scanId,
+            path:            file.path,
+            extension,
+            size:            file.size ?? 0,
+            importanceScore: file.importanceScore,
+            classification:  { create: { type: file.classification } }
+          },
+          include: { classification: true }
+        });
+      }));
+      dbFiles.push(...created);
+    }
+
+    return dbFiles;
+  }
+
+  /**
+   * Process files concurrently in groups of CONCURRENCY.
+   * Fetches content from GitHub, then calls the provided handler.
+   * Errors for individual files are caught and logged — they do not abort the scan.
+   */
+  async _processFilesInBatches(files, scanId, handler) {
+    for (let i = 0; i < files.length; i += CONCURRENCY) {
+      const batch = files.slice(i, i + CONCURRENCY);
+
+      await Promise.all(batch.map(async (dbFile) => {
+        try {
+          const content = await fetchFileContent(
+            this.githubAccessToken, this.owner, this.repoName, dbFile.path
+          );
+          await handler(dbFile, content);
+        } catch (err) {
+          console.warn(`[Scanner] Skipping ${dbFile.path}: ${err.message}`);
+        }
+      }));
+    }
+  }
+
+  /**
+   * Write a FileProfile's metrics to the FileMetrics table.
+   * Called per file immediately after extraction.
+   */
+  async _saveFileMetrics(fileId, profile) {
+    try {
+      await prisma.fileMetrics.create({
+        data: {
+          fileId,
+          linesOfCode:          profile.totalLines      || 0,
+          functionCount:        profile.totalFunctions  || 0,
+          componentCount:       profile.componentCount  || 0,
+          hookUsage:            profile.hookUsageCount  || 0,
+          avgFunctionLength:    profile.avgFunctionLength || 0,
+          largestFunction:      profile.maxFunctionLength || 0,
+          nestingDepth:         profile.maxNestingDepth || 0,
+          dependencyCount:      profile.dependencyCount || 0,
+          deadCodeIndicators:   profile.deadCodeCount   || 0,
+          cyclomaticComplexity: profile.cyclomaticComplexity || 0,
+          cognitiveComplexity:  profile.cognitiveComplexity  || 0,
+          duplicateCodeBlocks:  profile.duplicateCodeBlocks  || 0,
+          contentHash:          profile.contentHash     || null,
+        }
+      });
+    } catch (err) {
+      console.warn(`[Scanner] Failed to save metrics for ${profile.filePath}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Run SecurityScannerService.
+   * Fetches content again for files that need it — this is the one re-fetch,
+   * but only for the security scanner which has its own regex/AST patterns.
+   * Future: pass serialized content or use profile.imports for pattern matching.
+   */
+  async _runSecurityScan(topFiles) {
+    try {
+      const securityScanner = new SecurityScannerService();
+      // Collect files with content (re-use profiles where possible)
+      const filesForScan = [];
+      for (const file of topFiles.slice(0, 50)) {
+        try {
+          const content = await fetchFileContent(
+            this.githubAccessToken, this.owner, this.repoName, file.path
+          );
+          filesForScan.push({ ...file, content });
+        } catch {
+          // Skip on error
+        }
+      }
+      return securityScanner.scanFiles(filesForScan);
+    } catch (err) {
+      console.warn('[Scanner] Security scan failed:', err.message);
+      return [];
+    }
+  }
+
+  async _saveDependencyGraph(scanId, graphResult) {
+    try {
+      await prisma.dependencyGraph.create({
+        data: {
+          scanId,
+          nodes:    graphResult.nodes,
+          edges:    graphResult.edges,
+          cycles:   graphResult.cycles,
+          hotspots: graphResult.hotspots,
+          metrics:  graphResult.metrics,
+        }
+      });
+    } catch (err) {
+      console.warn('[Scanner] Failed to save dependency graph:', err.message);
+    }
+  }
+
+  async _saveFindings(scanId, findings) {
+    if (!findings.length) return;
+    try {
+      await prisma.finding.createMany({
+        data: findings.map(f => ({
+          scanId,
+          ruleId:         f.ruleId,
+          severity:       f.severity,
+          category:       f.category,
+          file:           f.file,
+          line:           f.line || 1,
+          symbol:         f.symbol || null,
+          message:        f.message,
+          explanation:    f.explanation,
+          metrics:        f.metrics || null,
+          recommendation: f.recommendation,
+        }))
+      });
+    } catch (err) {
+      console.warn('[Scanner] Failed to save findings:', err.message);
+    }
+  }
+
+  async _saveSecurityFindings(scanId, securityFindings) {
+    if (!securityFindings.length) return;
+    try {
+      await prisma.securityFinding.createMany({
+        data: securityFindings.map(f => ({
+          scanId,
+          type:           f.type,
+          severity:       f.severity,
+          file:           f.file,
+          lineNumber:     f.lineNumber,
+          snippet:        (f.snippet || '').substring(0, 500),
+          description:    f.description,
+          recommendation: f.recommendation || 'Review and secure this code segment.',
+        }))
+      });
+    } catch (err) {
+      console.warn('[Scanner] Failed to save security findings:', err.message);
+    }
   }
 }
