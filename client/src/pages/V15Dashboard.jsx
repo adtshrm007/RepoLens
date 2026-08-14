@@ -197,46 +197,83 @@ function AIAssistant({ scanId }) {
   const send = async (q = input.trim()) => {
     if (!q || loading) return;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: q }]);
+    const newMessages = [...messages, { role: 'user', content: q }];
+    setMessages(newMessages);
     setLoading(true);
     try {
-      const { data } = await api.post('/analysis/ask', { scanId, question: q });
-      setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+      // Send the entire conversation history, excluding the initial system/assistant intro if it's not structured
+      const apiMessages = newMessages.filter(m => m.role === 'user' || (m.role === 'assistant' && m.data));
+      const { data } = await api.post('/analysis/ask', { scanId, messages: apiMessages });
+      
+      setMessages(prev => [...prev, { role: 'assistant', data }]);
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠ Failed to get a response. Please check your OpenRouter API key.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', data: { answer: '⚠ Failed to get a response. Please check your API key or network connection.' } }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '560px', border: '1px solid rgba(139,92,246,0.2)', background: 'rgba(139,92,246,0.03)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '640px', border: '1px solid rgba(139,92,246,0.2)', background: 'rgba(139,92,246,0.03)' }}>
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(139,92,246,0.15)', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ color: '#8b5cf6', fontSize: '14px' }}>◆</span>
         <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#a78bfa', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 'bold' }}>AI Repository Assistant</span>
-        <span style={{ fontFamily: 'monospace', fontSize: '8px', color: 'rgba(255,255,255,0.25)', marginLeft: 'auto' }}>Powered by OpenRouter · No code re-analysis</span>
+        <span style={{ fontFamily: 'monospace', fontSize: '8px', color: 'rgba(255,255,255,0.25)', marginLeft: 'auto' }}>Powered by RepoLens Grounded Context</span>
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }} className="custom-scrollbar">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }} className="custom-scrollbar">
         {messages.map((m, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
             <span style={{ fontFamily: 'monospace', fontSize: '8px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               {m.role === 'user' ? 'YOU' : '◆ ASSISTANT'}
             </span>
             <div style={{
               maxWidth: '85%',
-              padding: '10px 14px',
-              background: m.role === 'user' ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${m.role === 'user' ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.07)'}`,
+              padding: '12px 16px',
+              background: m.role === 'user' ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${m.role === 'user' ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)'}`,
               fontFamily: 'sans-serif',
               fontSize: '13px',
               color: 'rgba(255,255,255,0.85)',
               lineHeight: '1.65',
               whiteSpace: 'pre-wrap'
             }}>
-              {m.content}
+              {m.content && <ReactMarkdown>{m.content}</ReactMarkdown>}
+              {m.data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <ReactMarkdown>{m.data.answer}</ReactMarkdown>
+                  
+                  {m.data.limitations && (
+                    <div style={{ padding: '8px 12px', background: 'rgba(234,179,8,0.1)', borderLeft: '3px solid #eab308', fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>
+                      <strong style={{ color: '#eab308' }}>Limitations:</strong> {m.data.limitations}
+                    </div>
+                  )}
+
+                  {m.data.evidence && m.data.evidence.length > 0 && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: '9px', color: '#8b5cf6', textTransform: 'uppercase', marginBottom: '6px' }}>Evidence Sources</div>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                        {m.data.evidence.map((ev, ei) => (
+                          <li key={ei}><code style={{ color: '#a78bfa' }}>{ev.file}:{ev.startLine}</code> {ev.findingId && `(${ev.findingId})`}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {m.data.recommendations && m.data.recommendations.length > 0 && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(34,197,94,0.05)', borderLeft: '3px solid #22c55e' }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: '9px', color: '#22c55e', textTransform: 'uppercase', marginBottom: '6px' }}>Recommendations</div>
+                      <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>
+                        {m.data.recommendations.map((rec, ri) => (
+                          <li key={ri}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
