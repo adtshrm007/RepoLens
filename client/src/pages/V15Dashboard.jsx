@@ -702,24 +702,71 @@ export default function V15Dashboard() {
           )}
 
           {/* ── COMPLEXITY ── */}
-          {activeTab === 'complexity' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
-              <MetricCard title="Total LOC" value={(metrics.totalLines || 0).toLocaleString()} />
-              <MetricCard title="Files Analyzed" value={metrics.fileCount || 0} />
-              <MetricCard title="Total Functions" value={(metrics.functionCount || 0).toLocaleString()} />
-              <MetricCard title="Avg Fn Length" value={Math.round(metrics.avgFunctionLength || 0)} subtitle="lines" />
-              <MetricCard title="Largest Function" value={metrics.largestFunction || 0} subtitle="lines" accent={metrics.largestFunction > 100 ? '#ef4444' : metrics.largestFunction > 50 ? '#eab308' : '#22c55e'} />
-              <MetricCard title="Max Nesting" value={metrics.maxNestingDepth || 0} subtitle="levels deep" accent={metrics.maxNestingDepth > 4 ? '#ef4444' : metrics.maxNestingDepth > 2 ? '#eab308' : '#22c55e'} />
-              <MetricCard title="Avg Cyclomatic" value={metrics.avgCyclomaticComplexity ? metrics.avgCyclomaticComplexity.toFixed(1) : 0} subtitle="paths/file" accent={metrics.avgCyclomaticComplexity > 15 ? '#ef4444' : metrics.avgCyclomaticComplexity > 10 ? '#eab308' : '#22c55e'} />
-              <MetricCard title="Avg Cognitive" value={metrics.avgCognitiveComplexity ? metrics.avgCognitiveComplexity.toFixed(1) : 0} subtitle="mental effort" accent={metrics.avgCognitiveComplexity > 15 ? '#ef4444' : metrics.avgCognitiveComplexity > 10 ? '#eab308' : '#22c55e'} />
-              <MetricCard title="Large Files" value={metrics.largeFilesCount || 0} subtitle=">300 LOC" accent={metrics.largeFilesCount > 5 ? '#ef4444' : metrics.largeFilesCount > 0 ? '#eab308' : '#22c55e'} />
-              <MetricCard title="Dead Code" value={metrics.deadCodeIndicators || 0} subtitle="indicators" accent={metrics.deadCodeIndicators > 5 ? '#ef4444' : '#eab308'} />
-              <MetricCard title="Duplicate Blocks" value={metrics.duplicateCodeBlocks || 0} subtitle="clones" accent={metrics.duplicateCodeBlocks > 5 ? '#ef4444' : '#eab308'} />
-              <MetricCard title="React Components" value={metrics.componentCount || 0} accent="#60a5fa" />
-              <MetricCard title="Hook Usage" value={metrics.hookUsageCount || 0} subtitle="hook calls" accent="#a78bfa" />
-              <MetricCard title="Dependencies" value={metrics.dependencyCount || 0} subtitle="import refs" />
-            </div>
-          )}
+          {activeTab === 'complexity' && (() => {
+            const compFindings = findings.filter(f => f.category === 'COMPLEXITY');
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+                  <MetricCard title="Total LOC" value={(metrics.totalLines || 0).toLocaleString()} />
+                  <MetricCard title="Files Analyzed" value={metrics.fileCount || 0} />
+                  <MetricCard title="Total Functions" value={(metrics.functionCount || 0).toLocaleString()} />
+                  <MetricCard title="Avg Fn Length" value={Math.round(metrics.avgFunctionLength || 0)} subtitle="lines" />
+                  <MetricCard title="Largest Function" value={metrics.largestFunction || 0} subtitle="lines" accent={metrics.largestFunction > 100 ? '#ef4444' : metrics.largestFunction > 50 ? '#eab308' : '#22c55e'} />
+                  <MetricCard title="Max Nesting" value={metrics.maxNestingDepth || 0} subtitle="levels deep" accent={metrics.maxNestingDepth > 4 ? '#ef4444' : metrics.maxNestingDepth > 2 ? '#eab308' : '#22c55e'} />
+                  <MetricCard title="Avg Cyclomatic" value={metrics.avgCyclomaticComplexity ? metrics.avgCyclomaticComplexity.toFixed(1) : 0} subtitle="paths/file" accent={metrics.avgCyclomaticComplexity > 15 ? '#ef4444' : metrics.avgCyclomaticComplexity > 10 ? '#eab308' : '#22c55e'} />
+                  <MetricCard title="Avg Cognitive" value={metrics.avgCognitiveComplexity ? metrics.avgCognitiveComplexity.toFixed(1) : 0} subtitle="mental effort" accent={metrics.avgCognitiveComplexity > 15 ? '#ef4444' : metrics.avgCognitiveComplexity > 10 ? '#eab308' : '#22c55e'} />
+                  <MetricCard title="Large Files" value={metrics.largeFilesCount || 0} subtitle=">300 LOC" accent={metrics.largeFilesCount > 5 ? '#ef4444' : metrics.largeFilesCount > 0 ? '#eab308' : '#22c55e'} />
+                  <MetricCard title="Dead Code" value={metrics.deadCodeIndicators || 0} subtitle="indicators" accent={metrics.deadCodeIndicators > 5 ? '#ef4444' : '#eab308'} />
+                  <MetricCard title="Duplicate Blocks" value={metrics.duplicateCodeBlocks || 0} subtitle="clones" accent={metrics.duplicateCodeBlocks > 5 ? '#ef4444' : '#eab308'} />
+                  <MetricCard title="React Components" value={metrics.componentCount || 0} accent="#60a5fa" />
+                  <MetricCard title="Hook Usage" value={metrics.hookUsageCount || 0} subtitle="hook calls" accent="#a78bfa" />
+                  <MetricCard title="Dependencies" value={metrics.dependencyCount || 0} subtitle="import refs" />
+                </div>
+                {compFindings.length > 0 && (
+                  <div style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.015)' }}>
+                    <SectionLabel color="#f97316" label={`High Complexity Functions (${compFindings.length})`} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                      {compFindings.map((f, i) => {
+                        const m = f.metrics || {};
+                        const cc = m.cyclomaticComplexity ?? '-';
+                        const cog = m.cognitiveComplexity ?? '-';
+                        const depth = m.maxNestingDepth ?? '-';
+                        const sevCol = f.severity === 'VERY_HIGH' ? '#ef4444' : f.severity === 'HIGH' ? '#f97316' : '#eab308';
+                        return (
+                          <div key={i} style={{ padding: '12px 14px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)', borderLeft: `3px solid ${sevCol}` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 'bold' }}>
+                                  {f.symbol || 'Anonymous Function'}
+                                </div>
+                                <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                  {f.file.split('/').pop()}:{f.startLine}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: '9px', padding: '3px 6px', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>CC: {cc}</span>
+                                <span style={{ fontFamily: 'monospace', fontSize: '9px', padding: '3px 6px', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>COG: {cog}</span>
+                                <span style={{ fontFamily: 'monospace', fontSize: '9px', padding: '3px 6px', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>NEST: {depth}</span>
+                              </div>
+                            </div>
+                            <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', marginBottom: '8px' }}>
+                              {f.explanation}
+                            </div>
+                            {f.recommendation && (
+                              <div style={{ padding: '8px 10px', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)', borderLeft: '2px solid #22c55e', fontFamily: 'sans-serif', fontSize: '11px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.4' }}>
+                                <span style={{ color: '#22c55e', fontWeight: 'bold', marginRight: '6px' }}>Recommendation:</span>
+                                {f.recommendation}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── FINDINGS (Code Quality) ── */}
           {activeTab === 'findings' && (

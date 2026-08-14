@@ -1,89 +1,126 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import DashboardLayout from "../Components/common/DashboardLayout.jsx";
-import RiskScore from "../Components/analysis/RiskScore.jsx";
-import FindingCard from "../Components/analysis/FindingCard.jsx";
 import api from "../services/api.js";
 
-const SEVERITIES = ["critical", "high", "medium", "low"];
+const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 const SEV_COLORS = {
-  critical: "#ef4444",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "rgba(255,255,255,0.5)",
+  CRITICAL: "#ef4444",
+  HIGH: "#f97316",
+  MEDIUM: "#eab308",
+  LOW: "rgba(255,255,255,0.5)",
 };
 
-/* ── helpers ─────────────────────────────────────────────────────────────── */
-function ScoreRing({ value, label, color }) {
-  const r = 28;
+function ScoreRing({ value, label, color, grade }) {
+  const r = 32;
   const circ = 2 * Math.PI * r;
   const fill = (value / 100) * circ;
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-      <svg width="72" height="72" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
-        <circle
-          cx="36" cy="36" r={r} fill="none"
-          stroke={color} strokeWidth="5"
-          strokeDasharray={`${fill} ${circ - fill}`}
-          strokeLinecap="round"
-          transform="rotate(-90 36 36)"
-          style={{ transition: "stroke-dasharray 0.8s ease" }}
-        />
-        <text x="36" y="40" textAnchor="middle" fill="#fff" fontSize="14" fontFamily="monospace" fontWeight="700">
-          {value}
-        </text>
-      </svg>
-      <span style={{ fontFamily: "monospace", fontSize: "9px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-        {label}
-      </span>
+    <div style={{ display: "flex", alignItems: "center", gap: "20px", padding: "16px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", width: "100%", maxWidth: "300px" }}>
+      <div style={{ position: "relative", width: "80px", height: "80px" }}>
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="6" />
+          <circle
+            cx="40" cy="40" r={r} fill="none"
+            stroke={color} strokeWidth="6"
+            strokeDasharray={`${fill} ${circ - fill}`}
+            strokeLinecap="round"
+            transform="rotate(-90 40 40)"
+            style={{ transition: "stroke-dasharray 0.8s ease" }}
+          />
+          <text x="40" y="45" textAnchor="middle" fill="#fff" fontSize="18" fontFamily="monospace" fontWeight="700">
+            {value}
+          </text>
+        </svg>
+      </div>
+      <div>
+        <div style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "4px" }}>
+          {label}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "24px", fontWeight: "bold", color }}>Grade {grade || '-'}</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-function SectionHeader({ color, label }) {
+function FindingItem({ finding }) {
+  // Distinguish Dependency vs Source
+  const isDep = finding.category === 'DEPENDENCY';
+  const color = SEV_COLORS[finding.severity] || "#fff";
+
   return (
-    <h3 style={{
-      margin: "0 0 12px",
-      fontFamily: "monospace",
-      fontSize: "9px",
-      letterSpacing: "0.2em",
-      textTransform: "uppercase",
-      color,
-      display: "flex",
-      alignItems: "center",
-      gap: "6px",
-    }}>
-      <span style={{ display: "inline-block", width: "16px", height: "1px", background: color }} />
-      {label}
-    </h3>
+    <div style={{ padding: "16px", border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.015)", borderLeft: `3px solid ${color}`, marginBottom: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <span style={{ fontFamily: "monospace", fontSize: "9px", padding: "3px 8px", border: `1px solid ${color}40`, background: `${color}15`, color, letterSpacing: "0.1em" }}>
+              {finding.severity}
+            </span>
+            <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "bold", color: "#fff" }}>
+              {isDep ? finding.symbol : (finding.type || finding.message)}
+            </span>
+          </div>
+          {isDep ? (
+            <div style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>
+              Package: <span style={{ color: "#fff" }}>{finding.symbol}</span> | Version: <span style={{ color: "#fff" }}>{finding.metrics?.version || 'N/A'}</span>
+            </div>
+          ) : (
+            <div style={{ fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>
+              {finding.file}:{finding.startLine || finding.lineNumber || finding.line || 0}
+            </div>
+          )}
+        </div>
+
+        {/* Badges */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {finding.cve && <span style={{ fontFamily: "monospace", fontSize: "10px", padding: "3px 6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#f87171" }}>CVE: {finding.cve}</span>}
+          {finding.cwe && <span style={{ fontFamily: "monospace", fontSize: "10px", padding: "3px 6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#60a5fa" }}>CWE: {finding.cwe}</span>}
+          {finding.cvss && <span style={{ fontFamily: "monospace", fontSize: "10px", padding: "3px 6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#eab308" }}>CVSS: {finding.cvss}</span>}
+          {finding.confidence && <span style={{ fontFamily: "monospace", fontSize: "10px", padding: "3px 6px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}>CONFIDENCE: {finding.confidence}</span>}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.6" }}>
+        {finding.explanation || finding.description}
+      </div>
+
+      {/* Code Snippet / Evidence */}
+      {(finding.evidence || finding.snippet) && (
+        <pre style={{ margin: 0, padding: "12px", background: "rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.05)", fontSize: "11px", color: "#fca5a5", overflowX: "auto", fontFamily: "monospace" }}>
+          {finding.evidence || finding.snippet}
+        </pre>
+      )}
+
+      {/* Footer Details */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {isDep && finding.metrics?.fixedVersion && (
+          <div style={{ padding: "8px 12px", background: "rgba(96,165,250,0.05)", borderLeft: "2px solid #60a5fa", fontFamily: "sans-serif", fontSize: "11px", color: "rgba(255,255,255,0.8)" }}>
+            <span style={{ color: "#60a5fa", fontWeight: "bold", marginRight: "6px" }}>Fixed Version:</span> {finding.metrics.fixedVersion}
+          </div>
+        )}
+        {(finding.recommendation) && (
+          <div style={{ padding: "8px 12px", background: "rgba(34,197,94,0.05)", borderLeft: "2px solid #22c55e", fontFamily: "sans-serif", fontSize: "11px", color: "rgba(255,255,255,0.8)", lineHeight: "1.5" }}>
+            <span style={{ color: "#22c55e", fontWeight: "bold", marginRight: "6px" }}>Recommendation:</span> {finding.recommendation}
+          </div>
+        )}
+      </div>
+
+    </div>
   );
 }
 
-/* ── main component ──────────────────────────────────────────────────────── */
 export default function FindingsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState("findings"); // "findings" | "insights"
-
-  // Extra data passed via navigation state (from repo analysis)
-  const navState = location.state || {};
-  const [insights, setInsights] = useState({
-    maintainabilityScore: navState.maintainabilityScore ?? null,
-    goodPractices: navState.goodPractices ?? [],
-    structureIssues: navState.structureIssues ?? [],
-    improvementPriorities: navState.improvementPriorities ?? [],
-  });
-
-  const hasInsights = insights.maintainabilityScore !== null ||
-    insights.goodPractices.length > 0 ||
-    insights.structureIssues.length > 0 ||
-    insights.improvementPriorities.length > 0;
+  const [activeSection, setActiveSection] = useState("ALL");
 
   useEffect(() => {
     const fetchAnalysis = async () => {
@@ -98,6 +135,33 @@ export default function FindingsPage() {
     };
     fetchAnalysis();
   }, [id]);
+
+  const { allSecurityFindings, breakdown, counts } = useMemo(() => {
+    if (!analysis) return { allSecurityFindings: [], breakdown: {}, counts: {} };
+    
+    // Combine old securityFindings and new RuleEngine findings (where category is SECURITY or DEPENDENCY)
+    const combined = [
+      ...(analysis.securityFindings || []).map(f => ({ ...f, category: 'SECURITY' })), // Normalize old
+      ...(analysis.findings || []).filter(f => f.category === 'SECURITY' || f.category === 'DEPENDENCY')
+    ];
+
+    // Filter into buckets
+    const b = {
+      SAST: combined.filter(f => f.category === 'SECURITY' && f.type !== 'HARDCODED_SECRET' && f.type !== 'CONFIG_ISSUE'),
+      DEP: combined.filter(f => f.category === 'DEPENDENCY'),
+      SEC: combined.filter(f => f.type === 'HARDCODED_SECRET'),
+      CONF: combined.filter(f => f.type === 'CONFIG_ISSUE'),
+    };
+
+    const c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    combined.forEach(f => {
+      if (f.severity && c[f.severity.toUpperCase()] !== undefined) {
+        c[f.severity.toUpperCase()]++;
+      }
+    });
+
+    return { allSecurityFindings: combined, breakdown: b, counts: c };
+  }, [analysis]);
 
   if (loading)
     return (
@@ -117,328 +181,116 @@ export default function FindingsPage() {
       </DashboardLayout>
     );
 
-  const findings = analysis.securityFindings || [];
-  const filtered = filter === "all" ? findings : findings.filter((f) => f.severity === filter);
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
-  findings.forEach((f) => { if (counts[f.severity] !== undefined) counts[f.severity]++; });
+  const securityScore = analysis.healthScore?.securityScore !== undefined ? Math.round(analysis.healthScore.securityScore) : 100;
+  const securityGrade = analysis.healthScore?.securityGrade || "A";
 
-  const overallScore = Math.round(analysis.healthScore?.overall || 0);
-  const maintScore = insights.maintainabilityScore !== null ? Math.round(insights.maintainabilityScore) : null;
+  const renderSection = (title, items) => {
+    if (!items || items.length === 0) return null;
+    return (
+      <div style={{ marginTop: "24px" }}>
+        <h3 style={{ margin: "0 0 16px", fontFamily: "monospace", fontSize: "12px", color: "#8b5cf6", letterSpacing: "0.15em", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ width: "20px", height: "1px", background: "#8b5cf6" }} />
+          {title} ({items.length})
+        </h3>
+        {items.map((f, i) => <FindingItem key={i} finding={f} />)}
+      </div>
+    );
+  };
 
   return (
     <DashboardLayout>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", animation: "fadeUp 0.3s ease" }}>
-
-        {/* ── Header ── */}
-        <div style={{ padding: "12px 16px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", animation: "fadeUp 0.3s ease", maxWidth: "1000px", margin: "0 auto", width: "100%" }}>
+        
+        {/* Header */}
+        <div style={{ padding: "16px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
               <button
-                onClick={() => navigate("/analysis")}
+                onClick={() => navigate(`/repo/${analysis.repositoryId}/scan/${analysis.id}`)}
                 style={{ background: "none", border: "none", fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.4)", cursor: "pointer", letterSpacing: "0.15em", textTransform: "uppercase" }}
               >
-                ← LOG
+                ← OVERVIEW
               </button>
               <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
-              <h1 style={{ margin: 0, fontFamily: "monospace", fontWeight: "700", fontSize: "13px", color: "#fff", letterSpacing: "0.05em" }}>
-                Job ID: {analysis.id.substring(0, 8)}
+              <h1 style={{ margin: 0, fontFamily: "monospace", fontWeight: "700", fontSize: "14px", color: "#fff", letterSpacing: "0.05em" }}>
+                Security & Vulnerability Report
               </h1>
             </div>
             <p style={{ margin: 0, fontFamily: "monospace", fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
-              Target: <span style={{ color: "rgba(255,255,255,0.8)" }}>{analysis.repository?.fullName}</span>
+              Repository: <span style={{ color: "rgba(255,255,255,0.8)" }}>{analysis.repository?.fullName}</span>
             </p>
-          </div>
-          <div
-            style={{
-              fontSize: "9px", fontFamily: "monospace", letterSpacing: "0.2em",
-              textTransform: "uppercase", padding: "3px 8px",
-              border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.04)",
-              color: "rgba(255,255,255,0.7)"
-            }}
-          >
-            {analysis.status}
           </div>
         </div>
 
-        {/* ── AI Summary ── */}
-        {analysis.summary && (
-          <div style={{ padding: "14px 18px", border: "1px solid rgba(139,92,246,0.2)", background: "rgba(139,92,246,0.05)", borderLeft: "3px solid #8b5cf6" }}>
-            <div style={{ fontFamily: "monospace", fontSize: "9px", color: "#8b5cf6", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "6px" }}>
-              ◆ AI Summary
-            </div>
-            <p style={{ margin: 0, fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.7" }}>
-              {analysis.summary}
-            </p>
-          </div>
-        )}
-
-        {/* ── Score Cards ── */}
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <div style={{ flex: "0 0 auto", padding: "16px 24px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", gap: "24px" }}>
-            <ScoreRing
-              value={overallScore}
-              label="Health Score"
-              color={overallScore >= 80 ? "#22c55e" : overallScore >= 60 ? "#eab308" : "#ef4444"}
-            />
-            {maintScore !== null && (
-              <ScoreRing
-                value={maintScore}
-                label="Maintainability"
-                color={maintScore >= 80 ? "#60a5fa" : maintScore >= 60 ? "#a78bfa" : "#f97316"}
-              />
-            )}
-          </div>
-
-          {/* Severity pills */}
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 min-w-[280px]">
-            {SEVERITIES.map((sev) => (
-              <div
-                key={sev}
-                style={{
-                  padding: "12px",
-                  border: `1px solid ${counts[sev] > 0 ? SEV_COLORS[sev] + "40" : "rgba(255,255,255,0.06)"}`,
-                  background: counts[sev] > 0 ? SEV_COLORS[sev] + "0d" : "rgba(255,255,255,0.01)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "4px",
-                }}
-              >
-                <span style={{ fontFamily: "monospace", fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: counts[sev] > 0 ? SEV_COLORS[sev] : "rgba(255,255,255,0.3)" }}>
-                  {sev}
-                </span>
-                <span style={{ fontFamily: "monospace", fontSize: "22px", fontWeight: "700", color: counts[sev] > 0 ? SEV_COLORS[sev] : "rgba(255,255,255,0.2)" }}>
-                  {counts[sev]}
-                </span>
+        {/* Score and Severities */}
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "stretch" }}>
+          <ScoreRing 
+            value={securityScore} 
+            label="Security Score" 
+            grade={securityGrade}
+            color={securityScore >= 80 ? "#22c55e" : securityScore >= 60 ? "#eab308" : "#ef4444"} 
+          />
+          
+          <div style={{ flex: "1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px", minWidth: "300px" }}>
+            {SEVERITIES.map(sev => (
+              <div key={sev} style={{ 
+                padding: "16px", 
+                border: `1px solid ${counts[sev] > 0 ? SEV_COLORS[sev] + "40" : "rgba(255,255,255,0.05)"}`, 
+                background: counts[sev] > 0 ? SEV_COLORS[sev] + "0f" : "rgba(255,255,255,0.01)",
+                display: "flex", flexDirection: "column", gap: "8px", justifyContent: "center"
+              }}>
+                <div style={{ fontFamily: "monospace", fontSize: "10px", color: counts[sev] > 0 ? SEV_COLORS[sev] : "rgba(255,255,255,0.3)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{sev}</div>
+                <div style={{ fontFamily: "monospace", fontSize: "28px", fontWeight: "bold", color: counts[sev] > 0 ? SEV_COLORS[sev] : "rgba(255,255,255,0.2)" }}>{counts[sev]}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── Tab Bar (only show Insights tab if has insights data) ── */}
-        {hasInsights && (
-          <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-            {["findings", "insights"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: "9px 20px",
-                  background: "none",
-                  border: "none",
-                  borderBottom: activeTab === tab ? "2px solid #8b5cf6" : "2px solid transparent",
-                  fontFamily: "monospace",
-                  fontSize: "10px",
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
-                  color: activeTab === tab ? "#a78bfa" : "rgba(255,255,255,0.4)",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                {tab === "findings" ? `Findings (${findings.length})` : "Code Insights"}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── FINDINGS TAB ── */}
-        {activeTab === "findings" && (
-          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-start">
-            {/* Filter sidebar */}
-            <div className="w-full md:w-[180px] shrink-0 flex flex-row md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0">
-              <div className="hidden md:block font-mono text-[9px] text-white/30 tracking-[0.2em] uppercase mb-1">Filter</div>
-              {["all", ...SEVERITIES].map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  style={{
-                    textAlign: "left",
-                    padding: "7px 10px",
-                    background: filter === f ? "rgba(255,255,255,0.07)" : "transparent",
-                    border: `1px solid ${filter === f ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.06)"}`,
-                    fontFamily: "monospace",
-                    fontSize: "10px",
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: filter === f ? "#fff" : "rgba(255,255,255,0.4)",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    transition: "all 0.15s",
-                  }}
-                  className="shrink-0"
-                >
-                  {f === "all" ? "All Findings" : f} ({f === "all" ? findings.length : counts[f]})
-                </button>
-              ))}
+        {/* Main Content */}
+        <div style={{ marginTop: "16px" }}>
+          {allSecurityFindings.length === 0 ? (
+            <div style={{ padding: "60px 20px", textAlign: "center", border: "1px solid rgba(34,197,94,0.2)", background: "rgba(34,197,94,0.05)" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🛡️</div>
+              <div style={{ fontFamily: "monospace", fontSize: "14px", color: "#22c55e", letterSpacing: "0.1em", fontWeight: "bold" }}>ZERO SECURITY FINDINGS</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.5)", marginTop: "8px" }}>Your repository is clean from known vulnerabilities and exposed secrets.</div>
             </div>
-
-            {/* Findings list */}
-            <div className="flex-1 min-w-0 flex flex-col gap-3">
-              {filtered.length === 0 ? (
-                <div style={{ padding: "40px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.15em", textTransform: "uppercase", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)" }}>
-                  NO FINDINGS MATCH CURRENT PARAMETERS.
-                </div>
-              ) : (
-                filtered.map((f) => <FindingCard key={f.id} finding={f} />)
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── INSIGHTS TAB ── */}
-        {activeTab === "insights" && hasInsights && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
-            {/* Improvement Priorities */}
-            {insights.improvementPriorities.length > 0 && (
-              <div style={{ padding: "18px 20px", border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.06)", borderRadius: "2px" }}>
-                <SectionHeader color="#a78bfa" label="Top Improvement Priorities" />
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {insights.improvementPriorities.map((item, i) => {
-                    const isObj = item && typeof item === "object";
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          border: "1px solid rgba(139,92,246,0.2)",
-                          borderRadius: "4px",
-                          overflow: "hidden",
-                          background: "rgba(0,0,0,0.2)",
-                        }}
-                      >
-                        {/* Priority header */}
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            padding: "10px 14px",
-                            background: "rgba(139,92,246,0.08)",
-                            borderBottom: isObj && (item.problem || item.codeQuote || item.howToFix) ? "1px solid rgba(139,92,246,0.15)" : "none",
-                          }}
-                        >
-                          <span style={{
-                            flexShrink: 0, width: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center",
-                            fontFamily: "monospace", fontSize: "10px", fontWeight: "700", color: "#a78bfa",
-                            border: "1px solid rgba(139,92,246,0.4)", borderRadius: "2px",
-                          }}>
-                            {i + 1}
-                          </span>
-                          <span style={{ fontFamily: "monospace", fontSize: "12px", fontWeight: "700", color: "#c4b5fd" }}>
-                            {isObj ? item.title || `Priority ${i + 1}` : item}
-                          </span>
-                        </div>
-
-                        {isObj && (
-                          <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                            {/* Problem */}
-                            {item.problem && (
-                              <p style={{ margin: 0, fontFamily: "sans-serif", fontSize: "13px", color: "rgba(255,255,255,0.7)", lineHeight: "1.6" }}>
-                                {item.problem}
-                              </p>
-                            )}
-                            {/* Code Quote */}
-                            {item.codeQuote && (
-                              <div>
-                                <div style={{ fontFamily: "monospace", fontSize: "8px", color: "rgba(234,179,8,0.7)", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: "4px" }}>
-                                  ↳ Affected Code
-                                </div>
-                                <pre
-                                  style={{
-                                    margin: 0,
-                                    padding: "8px 12px",
-                                    background: "rgba(0,0,0,0.5)",
-                                    border: "1px solid rgba(234,179,8,0.2)",
-                                    borderLeft: "3px solid #eab308",
-                                    borderRadius: "3px",
-                                    fontFamily: "monospace",
-                                    fontSize: "11px",
-                                    color: "#eab308",
-                                    whiteSpace: "pre-wrap",
-                                    wordBreak: "break-all",
-                                    lineHeight: "1.5",
-                                  }}
-                                >
-                                  {item.codeQuote}
-                                </pre>
-                              </div>
-                            )}
-                            {/* How to Fix */}
-                            {item.howToFix && (
-                              <div
-                                style={{
-                                  padding: "9px 12px",
-                                  background: "rgba(52,211,153,0.05)",
-                                  border: "1px solid rgba(52,211,153,0.15)",
-                                  borderRadius: "3px",
-                                  display: "flex",
-                                  gap: "8px",
-                                  alignItems: "flex-start",
-                                }}
-                              >
-                                <span style={{ fontFamily: "monospace", fontSize: "8px", color: "#34d399", fontWeight: "700", flexShrink: 0, marginTop: "3px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                                  How to Fix
-                                </span>
-                                <span style={{ fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.6)", lineHeight: "1.6" }}>
-                                  {item.howToFix}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+          ) : (
+            <>
+              {/* Filters */}
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px" }}>
+                {["ALL", "SAST", "DEP", "SEC", "CONF"].map(sec => {
+                  const label = sec === 'ALL' ? 'All Findings' : sec === 'SAST' ? 'Source Vulnerabilities' : sec === 'DEP' ? 'Dependencies' : sec === 'SEC' ? 'Secrets' : 'Configuration';
+                  const len = sec === 'ALL' ? allSecurityFindings.length : breakdown[sec].length;
+                  return (
+                    <button
+                      key={sec}
+                      onClick={() => setActiveSection(sec)}
+                      style={{
+                        padding: "8px 16px",
+                        background: activeSection === sec ? "rgba(139,92,246,0.15)" : "transparent",
+                        border: `1px solid ${activeSection === sec ? "#8b5cf6" : "transparent"}`,
+                        color: activeSection === sec ? "#fff" : "rgba(255,255,255,0.5)",
+                        fontFamily: "monospace", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase",
+                        cursor: "pointer", transition: "all 0.2s", whiteSpace: "nowrap"
+                      }}
+                    >
+                      {label} ({len})
+                    </button>
+                  );
+                })}
               </div>
-            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "14px" }}>
-              {/* Good Practices */}
-              {insights.goodPractices.length > 0 && (
-                <div style={{ padding: "18px 20px", border: "1px solid rgba(34,197,94,0.2)", background: "rgba(34,197,94,0.04)", borderRadius: "2px" }}>
-                  <SectionHeader color="#4ade80" label="Good Practices Observed" />
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    {insights.goodPractices.map((gp, i) => (
-                      <div key={i} style={{ borderLeft: "2px solid rgba(34,197,94,0.4)", paddingLeft: "10px" }}>
-                        <div style={{ fontFamily: "monospace", fontSize: "11px", fontWeight: "700", color: "#4ade80", marginBottom: "3px" }}>{gp.title}</div>
-                        <p style={{ margin: 0, fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.55)", lineHeight: "1.5" }}>{gp.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Structure Issues */}
-              {insights.structureIssues.length > 0 && (
-                <div style={{ padding: "18px 20px", border: "1px solid rgba(249,115,22,0.2)", background: "rgba(249,115,22,0.04)", borderRadius: "2px" }}>
-                  <SectionHeader color="#fb923c" label="Structure Issues" />
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                    {insights.structureIssues.map((si, i) => (
-                      <div key={i}>
-                        <div style={{ fontFamily: "monospace", fontSize: "11px", fontWeight: "700", color: "#fb923c", marginBottom: "3px" }}>{si.title}</div>
-                        <p style={{ margin: "0 0 5px", fontFamily: "sans-serif", fontSize: "12px", color: "rgba(255,255,255,0.55)", lineHeight: "1.5" }}>{si.description}</p>
-                        {si.recommendation && (
-                          <div style={{ padding: "5px 8px", background: "rgba(0,0,0,0.3)", borderLeft: "2px solid rgba(249,115,22,0.5)", fontFamily: "sans-serif", fontSize: "11px", color: "rgba(255,255,255,0.45)", lineHeight: "1.4" }}>
-                            <span style={{ fontFamily: "monospace", fontSize: "8px", color: "#fb923c", letterSpacing: "0.1em", fontWeight: "700" }}>FIX: </span>
-                            {si.recommendation}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+              {/* Lists */}
+              <div>
+                {(activeSection === "ALL" || activeSection === "SAST") && renderSection("Source Code Vulnerabilities", breakdown.SAST)}
+                {(activeSection === "ALL" || activeSection === "DEP") && renderSection("Dependency Vulnerabilities", breakdown.DEP)}
+                {(activeSection === "ALL" || activeSection === "SEC") && renderSection("Secrets Detected", breakdown.SEC)}
+                {(activeSection === "ALL" || activeSection === "CONF") && renderSection("Configuration Issues", breakdown.CONF)}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-
-      <style>{`
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
     </DashboardLayout>
   );
 }
