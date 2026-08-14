@@ -27,17 +27,41 @@ export class HighComplexityRule {
 
         // Build decision-point breakdown if available
         const decisionPoints = fn.decisionPoints ?? [];
+        
+        // Compute frequencies of decision points to give tailored recommendations
+        const dpFreq = {};
+        for (const dp of decisionPoints) {
+          dpFreq[dp.type] = (dpFreq[dp.type] || 0) + 1;
+        }
+
         const dpLines = decisionPoints
           .slice(0, 10) // cap to avoid huge strings
           .map(dp => `  - ${dp.type} at line ${dp.line}`)
           .join('\n');
 
+        let cognitiveAmplification = '';
+        if (fn.cognitiveComplexity > cc * 1.5) {
+          cognitiveAmplification = ` \nNote: The cognitive complexity is very high (${fn.cognitiveComplexity}), indicating that nesting makes these paths much harder to follow than the cyclomatic score suggests.`;
+        }
+
         const explanation =
           `Function '${fn.name}' has a cyclomatic complexity of ${cc} ` +
           `(threshold: 10, ${cc - 10} over limit).\n` +
           `This means it has ${cc} independent execution paths, making it ` +
-          `${cc >= 20 ? 'extremely' : cc >= 15 ? 'very' : ''} difficult to test, maintain, and reason about.\n` +
-          (dpLines ? `\nDecision points:\n${dpLines}` : '');
+          `${cc >= 20 ? 'extremely' : cc >= 15 ? 'very' : ''} difficult to test, maintain, and reason about.` +
+          cognitiveAmplification +
+          (dpLines ? `\n\nDecision points:\n${dpLines}` : '');
+
+        let recommendation = `Break '${fn.name}' into smaller, single-purpose functions. Target ≤ 10 per function.`;
+        if (dpFreq['if_statement'] > 5 && fn.maxNestingDepth > 3) {
+           recommendation = `The function is dominated by nested if-statements. Use guard clauses (early returns) at the top of '${fn.name}' to flatten the logic, and extract deeply nested blocks into helper functions.`;
+        } else if (dpFreq['switch_case'] > 5) {
+           recommendation = `The function relies heavily on a switch statement with many cases. Consider extracting this logic into a lookup table, a map of handler functions, or using polymorphism.`;
+        } else if ((dpFreq['ternary_expression'] || 0) + (dpFreq['logical_and'] || 0) + (dpFreq['logical_or'] || 0) > 5) {
+           recommendation = `The function has high complexity due to inline conditionals (ternaries/logical operators). Extract complex conditional logic into clearly named predicate functions (e.g., \`isValid()\`, \`hasAccess()\`).`;
+        } else if (dpFreq['if_statement'] > 5) {
+           recommendation = `The function has a long sequence of if-statements. Extract cohesive blocks of logic into their own single-purpose functions.`;
+        }
 
         findings.push({
           ruleId:      this.id,
@@ -58,8 +82,7 @@ export class HighComplexityRule {
             threshold: 10,
             decisionPoints,
           },
-          recommendation: `Break '${fn.name}' into smaller, single-purpose functions. ` +
-            `Target ≤ 10 per function. Each logical branch (if/switch/try) is a candidate for extraction.`,
+          recommendation,
         });
       }
     }

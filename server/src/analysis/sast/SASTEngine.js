@@ -5,6 +5,10 @@ import { UnsafeDynamicImportRule } from './rules/UnsafeDynamicImportRule.js';
 import { InsecureStorageRule } from './rules/InsecureStorageRule.js';
 import { DangerousHtmlRule } from './rules/DangerousHtmlRule.js';
 import { DataFlowTaintRule } from './rules/DataFlowTaintRule.js';
+import { PathTraversalRule } from './rules/PathTraversalRule.js';
+import { SqlInjectionRule } from './rules/SqlInjectionRule.js';
+import { PrototypePollutionRule } from './rules/PrototypePollutionRule.js';
+import { InsecureRandomRule } from './rules/InsecureRandomRule.js';
 
 export class SASTEngine {
   constructor() {
@@ -15,7 +19,11 @@ export class SASTEngine {
       new UnsafeDynamicImportRule(),
       new InsecureStorageRule(),
       new DangerousHtmlRule(),
-      new DataFlowTaintRule()
+      new DataFlowTaintRule(),
+      new PathTraversalRule(),
+      new SqlInjectionRule(),
+      new PrototypePollutionRule(),
+      new InsecureRandomRule()
     ];
   }
 
