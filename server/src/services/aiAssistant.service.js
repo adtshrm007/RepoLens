@@ -49,6 +49,7 @@ export class AIAssistantService {
 - DEPENDENCIES (npm packages, vulnerable dependencies, architecture graph)
 - ARCHITECTURE (layering, structure, design patterns)
 - REFACTORING (what to fix first, how to improve code, technical debt)
+- FUNCTION (asking about a specific function's logic, metrics, or details)
 - OVERVIEW (general summary, health score, onboarding)
 
 Recent conversation context:
@@ -61,7 +62,7 @@ Reply with ONLY the exact category name.`;
     try {
       const result = await callOpenRouter([{ role: 'user', content: prompt }]);
       const category = result.trim().toUpperCase();
-      const valid = ['SECURITY', 'COMPLEXITY', 'DEPENDENCIES', 'ARCHITECTURE', 'REFACTORING', 'OVERVIEW'];
+      const valid = ['SECURITY', 'COMPLEXITY', 'DEPENDENCIES', 'ARCHITECTURE', 'REFACTORING', 'FUNCTION', 'OVERVIEW'];
       return valid.includes(category) ? category : 'OVERVIEW';
     } catch (err) {
       console.warn('Classification failed, defaulting to OVERVIEW');
@@ -83,22 +84,52 @@ Reply with ONLY the exact category name.`;
     if (category === 'SECURITY' || category === 'REFACTORING') {
       const secFindings = await prisma.securityFinding.findMany({
         where: { scanId },
-        orderBy: { severity: 'asc' }, // Assuming CRITICAL < HIGH in alphabetical sorting? Actually we should just fetch all or top 30
+        orderBy: { severity: 'asc' }, 
         take: 30
       });
       // Sort critically: CRITICAL, HIGH, MEDIUM, LOW
       const sevMap = { CRITICAL: 1, HIGH: 2, MEDIUM: 3, LOW: 4 };
       secFindings.sort((a, b) => (sevMap[a.severity] || 5) - (sevMap[b.severity] || 5));
-      context.securityFindings = secFindings;
+      context.securityFindings = secFindings.map(f => ({
+        type: f.type, severity: f.severity, file: f.file, line: f.lineNumber,
+        snippet: f.snippet, description: f.description, cwe: f.cwe
+      }));
     }
 
-    if (category === 'COMPLEXITY' || category === 'REFACTORING') {
+    if (category === 'COMPLEXITY' || category === 'REFACTORING' || category === 'FUNCTION') {
       const compFindings = await prisma.finding.findMany({
         where: { scanId, category: 'COMPLEXITY' },
         orderBy: { severity: 'asc' },
         take: 20
       });
-      context.complexityFindings = compFindings;
+      // Unpack decision points from metrics JSON
+      context.complexityFindings = compFindings.map(f => {
+         const finding = {
+           rule: f.ruleId, symbol: f.symbol, file: f.file,
+           severity: f.severity, message: f.message,
+         };
+         if (f.metrics && typeof f.metrics === 'object') {
+           finding.metrics = {
+              cyclomatic: f.metrics.cyclomaticComplexity,
+              cognitive: f.metrics.cognitiveComplexity,
+              depth: f.metrics.maxNestingDepth
+           };
+           if (f.metrics.decisionPoints) {
+              finding.decisionPoints = f.metrics.decisionPoints;
+           }
+         }
+         return finding;
+      });
+      
+      // If FUNCTION, try to extract function name and filter
+      if (category === 'FUNCTION') {
+         // Very basic heuristic to find a word that looks like a function name in the question
+         const words = question.split(/[^a-zA-Z0-9_]/).filter(w => w.length > 2);
+         const targetFn = compFindings.find(f => f.symbol && words.includes(f.symbol));
+         if (targetFn) {
+            context.targetFunction = context.complexityFindings.find(f => f.symbol === targetFn.symbol);
+         }
+      }
     }
 
     if (category === 'DEPENDENCIES' || category === 'ARCHITECTURE') {
@@ -147,8 +178,8 @@ Format your response strictly as JSON matching this schema:
 }
 
 Prioritization rule: If asked what to fix first, prioritize: Confirmed critical security > High complexity > Architecture issues. Explain why.
-When discussing complexity, explain that '16' means a high number of independent paths, not exactly 16 paths.
-Security rule: Do not call a CWE a CVE. Only use data present.
+When discussing complexity, refer to the decision points breakdown if available.
+Security rule: Do not call a CWE a CVE. Only use data present. If you lack context on a function, state that you do not have its source code.
 
 Repository: ${scan.repository.fullName}
 Context Data:

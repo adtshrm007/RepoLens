@@ -14,6 +14,7 @@ import { DependencyAnalyzer } from '../analysis/analyzers/DependencyAnalyzer.js'
 import { RuleEngine }        from '../analysis/rules/RuleEngine.js';
 import { SecretDetector, isConfigFile } from '../analysis/sast/SecretDetector.js';
 import { SecurityScoringEngine } from './securityScoring.service.js';
+import { normalizeFindings, partitionFindings } from '../analysis/FindingNormalizer.js';
 
 /** Max files to fetch content for — balances depth vs time budget */
 const MAX_ANALYSIS_FILES = 100;
@@ -176,7 +177,7 @@ export class ScannerService {
 
     // ── Step 9: Security scan ──────────────────────────────────────────────────
     // Security scan is now performed during the CST pipeline single-pass.
-    const securityFindings = allSecurityFindings;
+    let securityFindings = allSecurityFindings;
 
     // Run dependency vulnerability scan on package.json files
     const pkgFiles = rawFiles.filter(f => f.type === 'file' && f.path.endsWith('package.json'));
@@ -194,13 +195,19 @@ export class ScannerService {
        const depFindings = await this.depVulnService.scanDependencies(pkgFilesWithContent);
        securityFindings.push(...depFindings);
     }
+    
+    // Normalize and deduplicate findings (e.g. merge same GHSA from multiple package.jsons)
+    securityFindings = normalizeFindings(securityFindings);
+    
+    // Partition findings so ScoringEngineService doesn't double-count dep vulns
+    const { sast: sastFindings, depVuln: depVulnFindings } = partitionFindings(securityFindings);
 
     // ── Step 10: Scoring ───────────────────────────────────────────────────────
-    const scoringEngine = new ScoringEngineService(repoMetrics, securityFindings, findings, graphResult);
+    const scoringEngine = new ScoringEngineService(repoMetrics, sastFindings, findings, graphResult);
     const healthScores  = scoringEngine.calculateScores();
 
     // Security Scoring (Standalone 0-100 score + Breakdown)
-    const securityScoring = new SecurityScoringEngine(securityFindings, securityFindings.filter(f => f.type === 'DEPENDENCY_VULNERABILITY'));
+    const securityScoring = new SecurityScoringEngine(securityFindings, depVulnFindings);
     const secResult = securityScoring.calculate();
 
     // ── Step 11: Write graph, findings, health to DB ───────────────────────────
