@@ -66,25 +66,32 @@ export class ComplexityAnalyzer {
   /**
    * Compute cyclomatic complexity for a single function node.
    * @param {object} fnNode - tree-sitter node of function type
-   * @returns {number}
+   * @returns {{ complexity: number, decisionPoints: Array<{type: string, line: number, column: number}> }}
    */
   computeCyclomatic(fnNode) {
     let complexity = 1; // base: one path always exists
+    const decisionPoints = [];
 
     this._walkSkipNestedFns(fnNode, (node) => {
+      let isBranch = false;
       if (CYCLOMATIC_BRANCH_TYPES.has(node.type)) {
-        complexity++;
-        return;
+        isBranch = true;
+      } else if (node.type === 'binary_expression') {
+        const op = node.children.find(c => LOGICAL_OPERATORS.has(c.type));
+        if (op) isBranch = true;
       }
 
-      // Each logical operator in a binary_expression adds one branch
-      if (node.type === 'binary_expression') {
-        const op = node.children.find(c => LOGICAL_OPERATORS.has(c.type));
-        if (op) complexity++;
+      if (isBranch) {
+        complexity++;
+        decisionPoints.push({
+          type: node.type,
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+        });
       }
     });
 
-    return complexity;
+    return { complexity, decisionPoints };
   }
 
   // ── Cognitive ──────────────────────────────────────────────────────────────
@@ -92,35 +99,109 @@ export class ComplexityAnalyzer {
   /**
    * Compute cognitive complexity for a single function node.
    * @param {object} fnNode - tree-sitter node of function type
-   * @returns {number}
+   * @returns {{ score: number, breakdown: Array<{type: string, line: number, column: number, increment: number, nestingBonus: number}> }}
    */
   computeCognitive(fnNode) {
     let score = 0;
+    const breakdown = [];
 
     const walk = (node, depth, isRoot) => {
       // Don't enter nested function bodies — each has its own complexity
       if (!isRoot && FUNCTION_NODE_TYPES.has(node.type)) return;
 
-      if (COGNITIVE_NESTING_TYPES.has(node.type)) {
-        // Structural element: +1 for presence, +depth for nesting
-        score += 1 + depth;
+      if (node.type === 'if_statement') {
+        const isElseIf = node.parent && node.parent.type === 'else_clause';
+        if (isElseIf) {
+          // else if: +1 flat, no nesting penalty
+          score += 1;
+          breakdown.push({
+            type: 'else_if',
+            line: node.startPosition.row + 1,
+            column: node.startPosition.column,
+            increment: 1,
+            nestingBonus: 0
+          });
+        } else {
+          // normal if: +1 + depth
+          const increment = 1 + depth;
+          score += increment;
+          if (!isRoot) {
+            breakdown.push({
+              type: 'if_statement',
+              line: node.startPosition.row + 1,
+              column: node.startPosition.column,
+              increment,
+              nestingBonus: depth
+            });
+          }
+        }
 
+        // Walk children
         for (const child of node.children ?? []) {
           if (child.type === 'else_clause') {
-            // else / else-if: flat +1, no nesting bonus
-            score += 1;
-            // Content of else runs one level deeper
-            walk(child, depth + 1, false);
+            walk(child, depth, false); // Pass current depth to else_clause
+          } else {
+            walk(child, depth + 1, false); // Body of if is +1 depth
+          }
+        }
+        return;
+      }
+
+      if (node.type === 'else_clause') {
+        const hasIf = node.children.some(c => c.type === 'if_statement');
+        if (!hasIf) {
+          // pure else: +1 flat
+          score += 1;
+          breakdown.push({
+            type: 'else_clause',
+            line: node.startPosition.row + 1,
+            column: node.startPosition.column,
+            increment: 1,
+            nestingBonus: 0
+          });
+        }
+        // Body of else: if it's an else-if, the if_statement stays at same depth.
+        // Otherwise, the body block is nested at +1 depth.
+        for (const child of node.children ?? []) {
+          if (child.type === 'if_statement') {
+            walk(child, depth, false);
           } else {
             walk(child, depth + 1, false);
           }
         }
-        return; // children already walked above
+        return;
+      }
+
+      if (COGNITIVE_NESTING_TYPES.has(node.type) && node.type !== 'if_statement') {
+        // Structural element: +1 for presence, +depth for nesting
+        const increment = 1 + depth;
+        score += increment;
+        if (!isRoot) {
+          breakdown.push({
+            type: node.type,
+            line: node.startPosition.row + 1,
+            column: node.startPosition.column,
+            increment,
+            nestingBonus: depth
+          });
+        }
+
+        for (const child of node.children ?? []) {
+          walk(child, depth + 1, false);
+        }
+        return;
       }
 
       // catch: flat +1
       if (node.type === 'catch_clause') {
         score += 1;
+        breakdown.push({
+          type: 'catch_clause',
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+          increment: 1,
+          nestingBonus: 0
+        });
         for (const child of node.children ?? []) {
           walk(child, depth + 1, false);
         }
@@ -129,7 +210,15 @@ export class ComplexityAnalyzer {
 
       // Ternary: +1 + depth
       if (node.type === 'ternary_expression') {
-        score += 1 + depth;
+        const increment = 1 + depth;
+        score += increment;
+        breakdown.push({
+          type: 'ternary_expression',
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+          increment,
+          nestingBonus: depth
+        });
         for (const child of node.children ?? []) {
           walk(child, depth + 1, false);
         }
@@ -137,10 +226,18 @@ export class ComplexityAnalyzer {
       }
 
       // Logical operators: +1 per sequence (not per individual operator)
-      // Handled inline — we track last operator to detect sequence changes
       if (node.type === 'binary_expression') {
         const op = node.children.find(c => LOGICAL_OPERATORS.has(c.type));
-        if (op) score += 1;
+        if (op) {
+          score += 1;
+          breakdown.push({
+            type: 'logical_operator',
+            line: node.startPosition.row + 1,
+            column: node.startPosition.column,
+            increment: 1,
+            nestingBonus: 0
+          });
+        }
       }
 
       // Continue walking
@@ -150,7 +247,7 @@ export class ComplexityAnalyzer {
     };
 
     walk(fnNode, 0, true);
-    return score;
+    return { score, breakdown };
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

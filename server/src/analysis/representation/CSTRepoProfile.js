@@ -85,6 +85,19 @@ export class CSTRepoProfile {
     // Files with parse errors (partial data — counted but flagged)
     const parseErrorCount = profiles.filter(p => p.parseError).length;
 
+    // ── Compute cross-file duplicate code blocks ───────────────
+    const globalBlockHashes = new Map();
+    let totalDuplicateCodeBlocks = 0;
+    for (const p of profiles) {
+      for (const hash of p.codeBlockHashes ?? []) {
+        if (globalBlockHashes.has(hash)) {
+          totalDuplicateCodeBlocks++;
+        } else {
+          globalBlockHashes.set(hash, true);
+        }
+      }
+    }
+
     this.metrics = {
       // ── Basic ────────────────────────────────────────────────────
       totalLines:          profiles.reduce((s, p) => s + (p.totalLines || 0), 0),
@@ -100,12 +113,15 @@ export class CSTRepoProfile {
       deadCodeIndicators:  profiles.reduce((s, p) => s + (p.deadCodeCount || 0), 0),
 
       // ── Complexity ────────────────────────────────────────────────
+      // NOTE: avgCyclomaticComplexity and avgCognitiveComplexity are PER-FUNCTION averages.
+      // profile.cyclomaticComplexity = SUM across all functions in that file.
+      // We divide by total function count, not file count, to get a meaningful average.
       maxNestingDepth:        profiles.reduce((max, p) => Math.max(max, p.maxNestingDepth || 0), 0),
-      avgCyclomaticComplexity: profiles.length > 0
-        ? profiles.reduce((s, p) => s + (p.cyclomaticComplexity || 0), 0) / profiles.length
+      avgCyclomaticComplexity: allFunctions.length > 0
+        ? allFunctions.reduce((s, f) => s + (f.cyclomaticComplexity || 0), 0) / allFunctions.length
         : 0,
-      avgCognitiveComplexity:  profiles.length > 0
-        ? profiles.reduce((s, p) => s + (p.cognitiveComplexity || 0), 0) / profiles.length
+      avgCognitiveComplexity:  allFunctions.length > 0
+        ? allFunctions.reduce((s, f) => s + (f.cognitiveComplexity || 0), 0) / allFunctions.length
         : 0,
 
       // ── React ─────────────────────────────────────────────────────
@@ -117,7 +133,7 @@ export class CSTRepoProfile {
       duplicateImports: profiles.reduce((s, p) => s + (p.duplicateImports || 0), 0),
 
       // ── Duplicate code ────────────────────────────────────────────
-      totalDuplicateCodeBlocks: profiles.reduce((s, p) => s + (p.duplicateCodeBlocks || 0), 0),
+      totalDuplicateCodeBlocks,
 
       // ── Backend stats ─────────────────────────────────────────────
       backendStats: {

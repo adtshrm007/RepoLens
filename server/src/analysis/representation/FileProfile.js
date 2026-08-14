@@ -87,7 +87,9 @@ export function createFileProfile() {
  *   isProps:               boolean  — single obj/destructured param in component context
  *   returnCount:           number
  *   cyclomaticComplexity:  number
+ *   decisionPoints:        { type: string, line: number, column: number }[]
  *   cognitiveComplexity:   number
+ *   cognitiveBreakdown:    { type: string, line: number, column: number, increment: number, nestingBonus: number }[]
  *   maxNestingDepth:       number
  * }
  *

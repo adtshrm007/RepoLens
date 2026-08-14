@@ -122,9 +122,7 @@ export class CSTDataExtractor {
       profile.avgFunctionLength   = lengths.reduce((a, b) => a + b, 0) / lengths.length;
       profile.maxFunctionLength   = Math.max(...lengths);
       profile.largeFunctionsCount = functions.filter(f => f.length > 50).length;
-      profile.deadCodeCount       = functions.filter(f =>
-        f.returnCount === 0 && f.name !== 'constructor'
-      ).length;
+      profile.deadCodeCount       = functions.reduce((sum, f) => sum + f.unreachableCount, 0);
       profile.totalReturnCount = functions.reduce((sum, f) => sum + f.returnCount, 0);
 
       // File-level complexity: sum across functions
@@ -143,7 +141,9 @@ export class CSTDataExtractor {
     profile.hooksUsed      = reactData.hooksUsed;
 
     // ── Duplicate code (hash-based structural comparison) ─────────────
-    profile.duplicateCodeBlocks = this._detectDuplicates(root);
+    const duplicateData = this._detectDuplicates(root);
+    profile.duplicateCodeBlocks = duplicateData.duplicateCount;
+    profile.codeBlockHashes = duplicateData.hashes;
 
     // ── Backend signals ────────────────────────────────────────────────
     profile.backend = this._extractBackendSignals(root, profile.imports);
@@ -288,6 +288,7 @@ export class CSTDataExtractor {
       const isProps = this._detectIsProps(node, name, parameterCount);
 
       const returnCount    = this._countReturns(node);
+      const unreachableCount = this._countUnreachableStatements(node);
       const cyclomatic     = this.complexityAnalyzer.computeCyclomatic(node);
       const cognitive      = this.complexityAnalyzer.computeCognitive(node);
       const maxNestingDepth = this._computeMaxNesting(node, 0);
@@ -303,13 +304,34 @@ export class CSTDataExtractor {
         parameterCount,
         isProps,
         returnCount,
-        cyclomaticComplexity: cyclomatic,
-        cognitiveComplexity: cognitive,
+        unreachableCount,
+        cyclomaticComplexity: cyclomatic.complexity,
+        decisionPoints: cyclomatic.decisionPoints,
+        cognitiveComplexity: cognitive.score,
+        cognitiveBreakdown: cognitive.breakdown,
         maxNestingDepth,
       });
     });
 
     return functions;
+  }
+
+  _countUnreachableStatements(fnNode) {
+    let count = 0;
+    this._walkSkipNestedFns(fnNode, (node) => {
+      if (node.type === 'statement_block') {
+        let afterTerminator = false;
+        for (const child of node.namedChildren ?? []) {
+          if (afterTerminator) {
+            count++;
+          }
+          if (child.type === 'return_statement' || child.type === 'throw_statement' || child.type === 'break_statement' || child.type === 'continue_statement') {
+            afterTerminator = true;
+          }
+        }
+      }
+    });
+    return count;
   }
 
   _getFunctionName(node) {
@@ -409,6 +431,7 @@ export class CSTDataExtractor {
 
   _detectDuplicates(root) {
     const blockHashes = new Map();
+    const hashes = [];
     let duplicateCount = 0;
 
     this._walk(root, (node) => {
@@ -416,6 +439,7 @@ export class CSTDataExtractor {
       if (node.type === 'statement_block' && (node.namedChildren?.length ?? 0) >= 3) {
         const canonical = this._canonicalizeNode(node);
         const hash = this._hashString(canonical);
+        hashes.push(hash);
         if (blockHashes.has(hash)) {
           duplicateCount++;
         } else {
@@ -424,7 +448,7 @@ export class CSTDataExtractor {
       }
     });
 
-    return duplicateCount;
+    return { duplicateCount, hashes };
   }
 
   /** Structural serialization — ignores identifier names, captures shape. */

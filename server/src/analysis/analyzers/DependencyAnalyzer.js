@@ -72,7 +72,7 @@ export class DependencyAnalyzer {
             nodes.set(targetId, {
               id:      targetId,
               label:   targetId,
-              type:    'dependency',   // external package
+              type:    'package',   // external package
               path:    targetId,
               fanIn:   0,
               fanOut:  0,
@@ -99,6 +99,11 @@ export class DependencyAnalyzer {
       const tgt = nodes.get(edge.target);
       if (src) src.fanOut++;
       if (tgt) tgt.fanIn++;
+    }
+
+    // Flag isolated nodes
+    for (const node of nodes.values()) {
+      node.isIsolated = (node.fanIn === 0 && node.fanOut === 0);
     }
 
     // ── 4. Detect circular dependencies (DFS) ─────────────────────
