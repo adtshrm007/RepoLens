@@ -521,6 +521,7 @@ const TABS = [
   { id: 'complexity',   label: 'Complexity' },
   { id: 'structure',    label: 'Repo Structure' },
   { id: 'insights',     label: 'Insights' },
+  { id: 'findings',     label: 'Findings' },
   { id: 'security',     label: 'Security' },
   { id: 'architecture', label: 'Dep Graph' },
   { id: 'onboarding',  label: 'Onboarding' },
@@ -588,6 +589,7 @@ export default function V15Dashboard() {
   const metrics = data.metrics || {};
   const health = data.healthScore || {};
   const security = data.securityFindings || [];
+  const findings = data.findings || [];
   const graph = data.dependencyGraph || { nodes: [], edges: [] };
   const onboarding = data.onboardingGuide || {};
   const architecture = data.architecture || {};
@@ -595,6 +597,9 @@ export default function V15Dashboard() {
 
   const secCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
   security.forEach(f => { const s = f.severity?.toUpperCase(); if (secCounts[s] !== undefined) secCounts[s]++; });
+
+  const findCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+  findings.forEach(f => { const s = f.severity?.toUpperCase(); if (findCounts[s] !== undefined) findCounts[s]++; });
 
   return (
     <DashboardLayout>
@@ -657,6 +662,11 @@ export default function V15Dashboard() {
                   {security.length}
                 </span>
               )}
+              {tab.id === 'findings' && findings.length > 0 && (
+                <span style={{ marginLeft: '6px', fontFamily: 'monospace', fontSize: '8px', background: findCounts.CRITICAL > 0 ? '#ef444420' : '#eab30820', color: findCounts.CRITICAL > 0 ? '#ef4444' : '#eab308', padding: '1px 5px', borderRadius: '2px' }}>
+                  {findings.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -700,12 +710,20 @@ export default function V15Dashboard() {
               <MetricCard title="Avg Fn Length" value={Math.round(metrics.avgFunctionLength || 0)} subtitle="lines" />
               <MetricCard title="Largest Function" value={metrics.largestFunction || 0} subtitle="lines" accent={metrics.largestFunction > 100 ? '#ef4444' : metrics.largestFunction > 50 ? '#eab308' : '#22c55e'} />
               <MetricCard title="Max Nesting" value={metrics.maxNestingDepth || 0} subtitle="levels deep" accent={metrics.maxNestingDepth > 4 ? '#ef4444' : metrics.maxNestingDepth > 2 ? '#eab308' : '#22c55e'} />
+              <MetricCard title="Avg Cyclomatic" value={metrics.avgCyclomaticComplexity ? metrics.avgCyclomaticComplexity.toFixed(1) : 0} subtitle="paths/file" accent={metrics.avgCyclomaticComplexity > 15 ? '#ef4444' : metrics.avgCyclomaticComplexity > 10 ? '#eab308' : '#22c55e'} />
+              <MetricCard title="Avg Cognitive" value={metrics.avgCognitiveComplexity ? metrics.avgCognitiveComplexity.toFixed(1) : 0} subtitle="mental effort" accent={metrics.avgCognitiveComplexity > 15 ? '#ef4444' : metrics.avgCognitiveComplexity > 10 ? '#eab308' : '#22c55e'} />
               <MetricCard title="Large Files" value={metrics.largeFilesCount || 0} subtitle=">300 LOC" accent={metrics.largeFilesCount > 5 ? '#ef4444' : metrics.largeFilesCount > 0 ? '#eab308' : '#22c55e'} />
               <MetricCard title="Dead Code" value={metrics.deadCodeIndicators || 0} subtitle="indicators" accent={metrics.deadCodeIndicators > 5 ? '#ef4444' : '#eab308'} />
+              <MetricCard title="Duplicate Blocks" value={metrics.duplicateCodeBlocks || 0} subtitle="clones" accent={metrics.duplicateCodeBlocks > 5 ? '#ef4444' : '#eab308'} />
               <MetricCard title="React Components" value={metrics.componentCount || 0} accent="#60a5fa" />
               <MetricCard title="Hook Usage" value={metrics.hookUsageCount || 0} subtitle="hook calls" accent="#a78bfa" />
               <MetricCard title="Dependencies" value={metrics.dependencyCount || 0} subtitle="import refs" />
             </div>
+          )}
+
+          {/* ── FINDINGS (Code Quality) ── */}
+          {activeTab === 'findings' && (
+            <SecurityPanel findings={findings} />
           )}
 
           {/* ── STRUCTURE ── */}
