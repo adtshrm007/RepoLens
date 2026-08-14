@@ -670,69 +670,28 @@ export const compareScansByIds = async (req, res) => {
   }
 };
 
+import { AIAssistantService } from '../services/aiAssistant.service.js';
+const aiService = new AIAssistantService();
+
 // ---------------------------------------------------------------------------
-// V2 AI Assistant (uses cached context, no re-analysis)
+// V2 AI Assistant (uses cached context, no re-analysis, highly grounded)
 // ---------------------------------------------------------------------------
 export const askAIAssistant = async (req, res) => {
   try {
-    const { scanId, question } = req.body;
-    if (!scanId || !question?.trim()) return res.status(400).json({ message: 'scanId and question are required' });
+    const { scanId, messages } = req.body;
+    
+    // Backwards compatibility for frontend that might still send { question }
+    let conversation = messages;
+    if (!conversation && req.body.question) {
+       conversation = [{ role: 'user', content: req.body.question }];
+    }
 
-    const scan = await prisma.repositoryScan.findFirst({
-      where: { id: scanId, repository: { userId: req.user.id } },
-      include: {
-        repository: true,
-        healthScore: true,
-        architecture: true,
-        onboardingGuide: true,
-        securityFindings: { take: 15, orderBy: { severity: 'asc' } }
-      }
-    });
+    if (!scanId || !conversation || conversation.length === 0) {
+       return res.status(400).json({ message: 'scanId and messages are required' });
+    }
 
-    if (!scan) return res.status(404).json({ message: 'Scan not found' });
-
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) return res.status(500).json({ message: 'AI service not configured' });
-
-    const context = `Repository: ${scan.repository.fullName}
-Overall Health: ${scan.healthScore?.overall || 'N/A'}/100
-Maintainability: ${scan.healthScore?.maintainability || 'N/A'}, Security: ${scan.healthScore?.security || 'N/A'}, Architecture: ${scan.healthScore?.architecture || 'N/A'}, Documentation: ${scan.healthScore?.documentation || 'N/A'}
-Total Files: ${scan.totalFiles}, Files Analyzed: ${scan.analyzedFiles}
-Scan Date: ${scan.createdAt}
-
-Repository Summary:
-${scan.summary || 'Not available.'}
-
-Architecture Overview:
-${scan.architecture?.summary || 'Not available.'}
-
-Onboarding Guide:
-${(scan.onboardingGuide?.content || 'Not available.').substring(0, 1500)}
-
-Security Findings (${scan.securityFindings.length}):
-${scan.securityFindings.map(f => `[${f.severity}] ${f.type} in ${f.file}: ${f.description.substring(0, 120)}`).join('\n')}`;
-
-    const prompt = `You are a senior software engineer reviewing a repository analysis. Answer the following question based ONLY on the provided analysis data. Be concise, accurate, and developer-friendly. Do not make up information not present in the context.
-
-Repository Analysis Context:
-${context}
-
-Question: ${question.trim()}
-
-Answer:`;
-
-    const response = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 800
-      },
-      { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
-    );
-
-    res.json({ answer: response.data.choices[0].message.content.trim() });
+    const responseJSON = await aiService.processRequest(scanId, req.user.id, conversation);
+    res.json(responseJSON);
   } catch (error) {
     console.error('AI Assistant Error:', error?.response?.data || error.message);
     res.status(500).json({ message: 'AI assistant failed to respond' });
