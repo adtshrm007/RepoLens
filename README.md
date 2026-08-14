@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-Express%205-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/Babel-AST%20Parsing-F9DC3E?style=for-the-badge&logo=babel&logoColor=black" alt="Babel" />
+  <img src="https://img.shields.io/badge/Tree--sitter-CST%20Parsing-4CAF50?style=for-the-badge&logo=tree&logoColor=white" alt="Tree-sitter" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Prisma-6-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
   <img src="https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -37,7 +37,7 @@
 
 > **RepoLens V2** is a full-stack Code Intelligence Platform designed to audit your technical debt, map your architecture, and flag critical security vulnerabilities. 
 
-Unlike standard "AI Wrappers" that blindly dump source code into an LLM, RepoLens utilizes a multi-pass **deterministic engine** architecture. It performs deep structural AST parsing and lexical regex scanning entirely in-house using Node.js. LLMs are strictly relegated to a presentation layer—synthesizing our deterministic data into human-readable architecture summaries.
+Unlike standard "AI Wrappers" that blindly dump source code into an LLM, RepoLens utilizes a multi-pass **deterministic engine** architecture. It performs deep structural CST parsing using Tree-sitter and lexical regex scanning entirely in-house using Node.js. LLMs are strictly relegated to a presentation layer—synthesizing our deterministic data into human-readable architecture summaries.
 
 > ⚠️ **Note on Language Support:** Currently, the deterministic static analysis and dependency graphing engines are heavily optimized for **JavaScript and TypeScript (JS/TS)**.
 
@@ -87,16 +87,16 @@ When scanning a full repository (top 50 files), sending raw code to an LLM is a 
 
 For full repository scans, **the AI never sees your raw source code.** Instead, RepoLens relies on a robust backend pipeline of independent, deterministic services:
 
-1. **The Dependency Graph Engine:** Babel AST traverses `ImportDeclaration` nodes to map cross-file dependencies.
-2. **The Static Analysis Engine:** Calculates exact LOC, nesting depth, and cognitive complexity without AI.
-3. **The Security Scanner:** Uses Regex and AST tree-walking to detect unsafe structural implementations (e.g., `eval()`, hardcoded secrets) with 100% mathematical certainty.
+1. **The CST Data Extractor:** Tree-sitter parses the code into a Concrete Syntax Tree to map cross-file dependencies and calculate exact LOC, nesting depth, and cyclomatic/cognitive complexity without AI.
+2. **The Dependency Scanner:** Resolves `package.json` dependencies against the Google OSV API to detect known CVEs/GHSAs.
+3. **The Security Scanner:** Uses Regex and CST tree-walking to detect unsafe structural implementations (e.g., `eval()`, SQL injections, Path Traversals) with 100% mathematical certainty.
 
 The local server saves these generic finding objects to PostgreSQL. **Only the resulting abstract JSON metadata is sent to the LLM.** 
 
-### Why this Hybrid AST + AI approach?
+### Why this Hybrid CST + AI approach?
 - **Defeating Token Limits & Cost:** We compress 20,000 lines of code into a tiny JSON payload, reducing token costs by ~98%.
-- **Eliminating AI Hallucinations:** The AI operates on a foundation of absolute truth derived from AST. It cannot hallucinate a vulnerability if the AST parser didn't feed it one.
-- **Guaranteeing Source Code Privacy:** Because the AST parsing happens on the local server, your raw proprietary source code never leaves your backend infrastructure during a repo scan. 
+- **Eliminating AI Hallucinations:** The AI operates on a foundation of absolute truth derived from CST. It cannot hallucinate a vulnerability if the CST parser didn't feed it one.
+- **Guaranteeing Source Code Privacy:** Because the CST parsing happens on the local server, your raw proprietary source code never leaves your backend infrastructure during a repo scan. 
 
 We use **Deterministic Code to do the scanning**, and **AI to do the storytelling** (synthesizing metrics into onboarding guides and architectural overviews).
 
@@ -131,7 +131,7 @@ We use **Deterministic Code to do the scanning**, and **AI to do the storytellin
 | Technology | Role |
 |:---|:---|
 | **Express 5** | High-performance HTTP server framework |
-| **Babel AST** | Deep code parsing and traversal |
+| **Tree-sitter CST** | Deep code parsing and traversal |
 | **Prisma 6** | Type-safe ORM + database migrations |
 | **PostgreSQL** | Primary relational database |
 | **JSON Web Token** | Stateless, dual-token session management (`httpOnly` cookies) |
@@ -161,11 +161,12 @@ graph TD
     end
 
     subgraph Engines [Node.js Pipeline]
-        D[Babel AST Parser] --> E[Dependency Grapher]
-        D --> F[Static Analyzer]
-        D --> G[Security Scanner]
-        F --> H[Scoring Engine]
+        D[Tree-sitter CST Parser] --> E[Dependency Analyzer]
+        D --> F[Data Extractor]
+        D --> G[SAST Security Scanner]
+        F --> H[Rule & Scoring Engines]
         G --> H
+        K[OSV Dependency Vulnerability] --> H
     end
 
     subgraph Database [PostgreSQL]
@@ -258,5 +259,5 @@ npm run dev
 ---
 
 <div align="center">
-  <p><i>Built with ♥ using React, Babel AST, Prisma, and Express</i></p>
+  <p><i>Built with ♥ using React, Tree-sitter CST, Prisma, and Express</i></p>
 </div>
