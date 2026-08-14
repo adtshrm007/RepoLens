@@ -28,6 +28,9 @@
     "nodemon": "^3.1.14",
     "octokit": "^5.0.5",
     "prisma": "6.19.3",
+    "tree-sitter": "^0.25.1",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
     "validator": "^13.15.35"
   }
 }
