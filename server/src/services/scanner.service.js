@@ -1,7 +1,8 @@
 import prisma from '../utils/prisma.util.js';
 import { fetchRepositoryTree, fetchFileContent } from './github.service.js';
 import { ClassificationService } from './classification.service.js';
-import { SecurityScannerService } from './securityScanner.service.js';
+import { SASTEngine } from '../analysis/sast/SASTEngine.js';
+import { DependencyVulnerabilityService } from './dependencyVulnerability.service.js';
 import { ScoringEngineService } from './scoringEngine.service.js';
 import { generateV1_5Insights } from './analysis.service.js';
 
@@ -11,6 +12,8 @@ import { CSTDataExtractor }  from '../analysis/representation/CSTDataExtractor.j
 import { CSTRepoProfile }    from '../analysis/representation/CSTRepoProfile.js';
 import { DependencyAnalyzer } from '../analysis/analyzers/DependencyAnalyzer.js';
 import { RuleEngine }        from '../analysis/rules/RuleEngine.js';
+import { SecretDetector, isConfigFile } from '../analysis/sast/SecretDetector.js';
+import { SecurityScoringEngine } from './securityScoring.service.js';
 
 /** Max files to fetch content for — balances depth vs time budget */
 const MAX_ANALYSIS_FILES = 100;
@@ -33,6 +36,9 @@ export class ScannerService {
     this.repoProfile           = new CSTRepoProfile();
     this.dependencyAnalyzer    = new DependencyAnalyzer();
     this.ruleEngine            = new RuleEngine();
+    this.sastEngine            = new SASTEngine();
+    this.secretDetector        = new SecretDetector();
+    this.depVulnService        = new DependencyVulnerabilityService();
   }
 
   // ── Public ──────────────────────────────────────────────────────────────────
@@ -99,6 +105,7 @@ export class ScannerService {
     //   CONCURRENCY files at a time. Each FileProfile is written to DB
     //   immediately as it completes (no waiting for all files).
     let analyzedCount = 0;
+    const allSecurityFindings = [];
     await this._processFilesInBatches(topFiles, scanId, async (dbFile, content) => {
       // Parse
       const extension   = dbFile.extension;
@@ -119,6 +126,19 @@ export class ScannerService {
 
       // Accumulate in CSTRepoProfile
       this.repoProfile.addFileProfile(profile);
+
+      // Run SAST
+      if (parseResult.success && parseResult.rootNode) {
+        const fileSecurityFindings = this.sastEngine.scan(parseResult.rootNode, content, dbFile.path);
+        allSecurityFindings.push(...fileSecurityFindings);
+      }
+
+      // Run SecretDetector
+      if (isConfigFile(dbFile.path)) {
+        allSecurityFindings.push(...this.secretDetector.scanConfigFile(dbFile.path, content));
+      } else {
+        allSecurityFindings.push(...this.secretDetector.scanContent(dbFile.path, content));
+      }
 
       // Write FileMetrics to DB immediately
       await this._saveFileMetrics(dbFile.id, profile);
@@ -155,23 +175,33 @@ export class ScannerService {
     const findings = this.ruleEngine.run(this.repoProfile, graphResult);
 
     // ── Step 9: Security scan ──────────────────────────────────────────────────
-    //   SecurityScannerService receives files with content directly.
-    //   We pass a lightweight view of what was processed.
-    const filesForSecurity = topFiles
-      .map(f => {
-        const profile = this.repoProfile.getFileProfile(f.path);
-        return profile && !profile.parseError ? { ...f, content: null } : null;
-      })
-      .filter(Boolean);
+    // Security scan is now performed during the CST pipeline single-pass.
+    const securityFindings = allSecurityFindings;
 
-    // Re-fetch content for security scanner (it has its own patterns)
-    // To avoid re-fetching, we pass the profiles instead.
-    // SecurityScannerService is kept unchanged — pass files that were processed.
-    const securityFindings = await this._runSecurityScan(topFiles);
+    // Run dependency vulnerability scan on package.json files
+    const pkgFiles = rawFiles.filter(f => f.type === 'file' && f.path.endsWith('package.json'));
+    const pkgFilesWithContent = [];
+    for (const file of pkgFiles) {
+       try {
+          const content = await fetchFileContent(this.githubAccessToken, this.owner, this.repoName, file.path);
+          pkgFilesWithContent.push({ path: file.path, content });
+       } catch (err) {
+          console.warn(`[Scanner] Failed to fetch ${file.path}:`, err.message);
+       }
+    }
+    
+    if (pkgFilesWithContent.length > 0) {
+       const depFindings = await this.depVulnService.scanDependencies(pkgFilesWithContent);
+       securityFindings.push(...depFindings);
+    }
 
     // ── Step 10: Scoring ───────────────────────────────────────────────────────
     const scoringEngine = new ScoringEngineService(repoMetrics, securityFindings, findings, graphResult);
     const healthScores  = scoringEngine.calculateScores();
+
+    // Security Scoring (Standalone 0-100 score + Breakdown)
+    const securityScoring = new SecurityScoringEngine(securityFindings, securityFindings.filter(f => f.type === 'DEPENDENCY_VULNERABILITY'));
+    const secResult = securityScoring.calculate();
 
     // ── Step 11: Write graph, findings, health to DB ───────────────────────────
     await this._saveDependencyGraph(scanId, graphResult);
@@ -179,7 +209,17 @@ export class ScannerService {
     await this._saveSecurityFindings(scanId, securityFindings);
 
     await prisma.healthScore.create({
-      data: { scanId, ...healthScores }
+      data: {
+        scanId,
+        maintainability: healthScores.maintainability,
+        security:        healthScores.security,
+        architecture:    healthScores.architecture,
+        documentation:   healthScores.documentation,
+        overall:         healthScores.overall,
+        securityScore:   secResult.score,
+        securityGrade:   secResult.grade,
+        securityBreakdown: { breakdown: secResult.breakdown, deductions: secResult.deductions },
+      }
     });
 
     // ── Step 12: AI insights ───────────────────────────────────────────────────
@@ -306,33 +346,7 @@ export class ScannerService {
     }
   }
 
-  /**
-   * Run SecurityScannerService.
-   * Fetches content again for files that need it — this is the one re-fetch,
-   * but only for the security scanner which has its own regex/AST patterns.
-   * Future: pass serialized content or use profile.imports for pattern matching.
-   */
-  async _runSecurityScan(topFiles) {
-    try {
-      const securityScanner = new SecurityScannerService();
-      // Collect files with content (re-use profiles where possible)
-      const filesForScan = [];
-      for (const file of topFiles.slice(0, 50)) {
-        try {
-          const content = await fetchFileContent(
-            this.githubAccessToken, this.owner, this.repoName, file.path
-          );
-          filesForScan.push({ ...file, content });
-        } catch {
-          // Skip on error
-        }
-      }
-      return securityScanner.scanFiles(filesForScan);
-    } catch (err) {
-      console.warn('[Scanner] Security scan failed:', err.message);
-      return [];
-    }
-  }
+
 
   async _saveDependencyGraph(scanId, graphResult) {
     try {
@@ -360,13 +374,20 @@ export class ScannerService {
           ruleId:         f.ruleId,
           severity:       f.severity,
           category:       f.category,
+          confidence:     f.confidence || 'HIGH',
           file:           f.file,
-          line:           f.line || 1,
+          line:           f.startLine ?? f.line ?? 1,
+          startLine:      f.startLine ?? f.line ?? 0,
+          endLine:        f.endLine ?? 0,
           symbol:         f.symbol || null,
           message:        f.message,
           explanation:    f.explanation,
+          evidence:       f.evidence || null,
           metrics:        f.metrics || null,
           recommendation: f.recommendation,
+          cwe:            f.cwe || null,
+          cve:            f.cve || null,
+          cvss:           f.cvss || null,
         }))
       });
     } catch (err) {
@@ -387,6 +408,9 @@ export class ScannerService {
           snippet:        (f.snippet || '').substring(0, 500),
           description:    f.description,
           recommendation: f.recommendation || 'Review and secure this code segment.',
+          cwe:            f.cwe || null,
+          cve:            f.cve || null,
+          cvss:           f.cvss || null,
         }))
       });
     } catch (err) {

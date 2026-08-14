@@ -98,11 +98,12 @@ export const getScanFullPayload = async (req, res) => {
         dependencyCount:      true,
         deadCodeIndicators:   true,
         duplicateCodeBlocks:  true,
+        // Sum of per-file complexity totals — used for correct per-function avg
+        cyclomaticComplexity: true,
+        cognitiveComplexity:  true,
       },
       _avg: {
         avgFunctionLength:    true,
-        cyclomaticComplexity: true,
-        cognitiveComplexity:  true,
       },
       _max: {
         largestFunction: true,
@@ -114,10 +115,21 @@ export const getScanFullPayload = async (req, res) => {
       where: { file: { scanId: id }, linesOfCode: { gt: 300 } }
     });
 
+    // Compute true per-function complexity averages:
+    // Each FileMetrics.cyclomaticComplexity = SUM of CC across all functions in that file.
+    // Dividing by total function count gives the correct per-function average.
+    const totalFunctionCount = metrics._sum.functionCount || 0;
+    const avgCyclomaticComplexity = totalFunctionCount > 0
+      ? (metrics._sum.cyclomaticComplexity || 0) / totalFunctionCount
+      : 0;
+    const avgCognitiveComplexity = totalFunctionCount > 0
+      ? (metrics._sum.cognitiveComplexity || 0) / totalFunctionCount
+      : 0;
+
     const aggregatedMetrics = {
       totalLines:              metrics._sum.linesOfCode          || 0,
       fileCount:               scan.analyzedFiles                || 0,
-      functionCount:           metrics._sum.functionCount        || 0,
+      functionCount:           totalFunctionCount,
       componentCount:          metrics._sum.componentCount       || 0,
       hookUsageCount:          metrics._sum.hookUsage            || 0,
       avgFunctionLength:       metrics._avg.avgFunctionLength    || 0,
@@ -127,9 +139,9 @@ export const getScanFullPayload = async (req, res) => {
       largeFilesCount:         largeFilesCount                   || 0,
       dependencyCount:         metrics._sum.dependencyCount      || 0,
       duplicateCodeBlocks:     metrics._sum.duplicateCodeBlocks  || 0,
-      // New complexity metrics from tree-sitter
-      avgCyclomaticComplexity: metrics._avg.cyclomaticComplexity || 0,
-      avgCognitiveComplexity:  metrics._avg.cognitiveComplexity  || 0,
+      // Corrected: per-function averages, not per-file averages
+      avgCyclomaticComplexity,
+      avgCognitiveComplexity,
     };
 
     res.json({

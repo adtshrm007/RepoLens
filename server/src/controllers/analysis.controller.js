@@ -4,8 +4,11 @@ import { fetchFileContent, fetchRepositoryTree } from "../services/github.servic
 import { runAIAnalysis, runCodeExplorer, generateRepoDocs, generateV1_5Insights } from "../services/analysis.service.js";
 import { StaticAnalysisService } from "../services/staticAnalysis.service.js";
 import { DependencyGraphService } from "../services/dependencyGraph.service.js";
-import { SecurityScannerService } from "../services/securityScanner.service.js";
 import { ScoringEngineService } from "../services/scoringEngine.service.js";
+import { TreeSitterParser } from '../analysis/parser/TreeSitterParser.js';
+import { CSTDataExtractor } from '../analysis/representation/CSTDataExtractor.js';
+import { CSTRepoProfile } from '../analysis/representation/CSTRepoProfile.js';
+import { SASTEngine } from '../analysis/sast/SASTEngine.js';
 
 // @desc    Run analysis on selected files
 // @route   POST /analysis/run
@@ -42,15 +45,30 @@ export const runAnalysis = async (req, res) => {
       files.push(...results.filter(Boolean));
     }
 
-    // 2. Run Deterministic Services
-    const staticAnalyzer = new StaticAnalysisService();
-    const metrics = staticAnalyzer.analyzeFiles(files);
+    // 2. Build CST Profile and Run Analysis
+    const parser = new TreeSitterParser();
+    const extractor = new CSTDataExtractor();
+    const repoProfile = new CSTRepoProfile();
+    const sastEngine = new SASTEngine();
+    const securityFindingsList = [];
 
-    const securityScanner = new SecurityScannerService();
-    const securityFindingsList = securityScanner.scanFiles(files);
+    for (const f of files) {
+      const extension = f.path.split('.').pop();
+      const parseResult = parser.parse({ path: f.path, content: f.content, extension });
+      const profile = extractor.extract(parseResult);
+      repoProfile.addFileProfile(profile);
+
+      if (parseResult.success && parseResult.rootNode) {
+        const findings = sastEngine.scan(parseResult.rootNode, f.content, f.path);
+        securityFindingsList.push(...findings);
+      }
+    }
+
+    const staticAnalyzer = new StaticAnalysisService();
+    const metrics = staticAnalyzer.analyzeFiles(repoProfile);
 
     const graphBuilder = new DependencyGraphService();
-    const graph = graphBuilder.buildGraph(files);
+    const graph = graphBuilder.buildGraph(repoProfile);
 
     const scoringEngine = new ScoringEngineService(metrics, securityFindingsList);
     const healthScores = scoringEngine.calculateScores();
@@ -287,6 +305,7 @@ export const getAnalysisById = async (req, res) => {
       include: { 
         repository: true, 
         securityFindings: true,
+        findings: { orderBy: { severity: 'asc' } },
         healthScore: true,
         dependencyGraph: true,
         onboardingGuide: true,
