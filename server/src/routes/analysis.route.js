@@ -2,7 +2,7 @@ import express from "express";
 import { 
   runAnalysis, getAnalysisHistory, getAnalysisById, runManualAnalysis, exploreManualCode, exploreRepoFile, generateDocs,
   getLatestMetrics, getLatestHealth, getLatestGraph, getLatestSecurity, getLatestOnboarding,
-  getDashboardStats, compareScansByIds, askAIAssistant, globalSearch
+  getDashboardStats, compareScansByIds, askAIAssistant, globalSearch, getLatestFindings
 } from "../controllers/analysis.controller.js";
 import { verifyToken } from "../middleware/verifyJWT.middleware.js";
 
@@ -27,6 +27,7 @@ router.get("/repo/:repoId/latest/health", getLatestHealth);
 router.get("/repo/:repoId/latest/graph", getLatestGraph);
 router.get("/repo/:repoId/latest/security", getLatestSecurity);
 router.get("/repo/:repoId/latest/onboarding", getLatestOnboarding);
+router.get("/repo/:repoId/latest/findings", getLatestFindings);
 
 // Wildcard last — must not shadow any specific routes above
 router.get("/:id", getAnalysisById);
